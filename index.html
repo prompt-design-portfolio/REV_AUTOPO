@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>REV Job Pricer</title>
+<meta name="robots" content="noindex,nofollow">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Semi+Condensed:wght@600;700&display=swap" rel="stylesheet">
+<style>
+/* Layout idea: catalog on the left to tap quantities, price + PO notes pinned on the right; one column with a bottom total bar on small screens. */
+:root{
+  --bg:#f1f4f5; --surface:#ffffff; --ink:#15242b; --muted:#566871; --line:#d5dde1;
+  --accent:#0e6976; --accent-ink:#ffffff; --accent-soft:#e0f0f2; --warn:#8f4f00; --warn-soft:#fdf1dc; --bad:#a8321f;
+  --display:"Barlow Semi Condensed","Arial Narrow",Arial,sans-serif;
+  --body:"Barlow","Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#0e161a; --surface:#172329; --ink:#e7eff2; --muted:#96a8b0; --line:#2b3b43;
+    --accent:#56bccb; --accent-ink:#04262b; --accent-soft:#17363c; --warn:#f0b860; --warn-soft:#3a2c12; --bad:#f08a78;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0e161a; --surface:#172329; --ink:#e7eff2; --muted:#96a8b0; --line:#2b3b43;
+  --accent:#56bccb; --accent-ink:#04262b; --accent-soft:#17363c; --warn:#f0b860; --warn-soft:#3a2c12; --bad:#f08a78;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 16px/1.4 var(--body);font-variant-numeric:tabular-nums}
+button,input{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+h1,h2,h3{font-family:var(--display);margin:0;text-wrap:balance;line-height:1.15}
+.wrap{max-width:1320px;margin:0 auto;padding:0 16px}
+
+.top{display:flex;flex-wrap:wrap;gap:10px 20px;align-items:center;justify-content:space-between;padding:16px 0 12px}
+.top h1{font-size:28px;font-weight:700;letter-spacing:.01em}
+.top .list{color:var(--muted);font-size:14px;margin-top:2px}
+.top .list b{color:var(--ink);font-weight:500}
+.actions{display:flex;gap:8px;flex-wrap:wrap}
+.btn{min-height:44px;padding:0 16px;border-radius:8px;border:1px solid var(--line);background:var(--surface);font-weight:500}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
+.btn.small{min-height:36px;padding:0 12px;font-size:14px}
+.btn.danger{border-color:var(--bad);color:var(--bad)}
+.note{background:var(--warn-soft);color:var(--warn);border-radius:8px;padding:10px 12px;font-size:14px;margin-bottom:10px;display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+
+.cats{position:sticky;top:0;z-index:5;background:var(--bg);padding:8px 0;border-bottom:1px solid var(--line)}
+.cats .row{display:flex;gap:8px;overflow-x:auto;padding:2px 16px;scrollbar-width:thin;max-width:1320px;margin:0 auto}
+.chip{flex:none;min-height:40px;padding:0 14px;border-radius:20px;border:1px solid var(--line);background:var(--surface);font-weight:500;white-space:nowrap;display:flex;align-items:center;gap:8px}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.chip .n{background:var(--accent);color:var(--accent-ink);border-radius:10px;min-width:20px;height:20px;padding:0 6px;font-size:12px;font-weight:600;display:inline-flex;align-items:center;justify-content:center}
+
+.layout{display:grid;grid-template-columns:minmax(0,1fr) 400px;gap:20px;align-items:start;padding:16px 0 40px}
+.find{display:flex;gap:8px;margin-bottom:12px}
+.find input{flex:1;min-width:0;min-height:44px;border:1px solid var(--line);border-radius:8px;background:var(--surface);padding:0 12px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px}
+.sec{font:600 15px/1.2 var(--display);letter-spacing:.04em;text-transform:uppercase;color:var(--muted);padding:14px 14px 6px}
+.sec .from{color:var(--accent)}
+.item{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:6px 14px;align-items:center;padding:10px 14px;border-top:1px solid var(--line)}
+.item.on{background:var(--accent-soft)}
+.item .d{font-size:15px;overflow-wrap:anywhere}
+.item .p{color:var(--muted);font-size:15px;text-align:right;white-space:nowrap}
+.step{display:flex;align-items:center;gap:4px}
+.step button{width:44px;height:44px;border-radius:8px;border:1px solid var(--line);background:var(--surface);font-size:22px;line-height:1;font-weight:500}
+.step input{width:54px;height:44px;text-align:center;border:1px solid var(--line);border-radius:8px;background:var(--surface);font-weight:600}
+.item.on .step input{border-color:var(--accent)}
+.empty{padding:22px 14px;color:var(--muted)}
+
+aside{scroll-margin-top:70px;position:sticky;top:66px;display:grid;gap:16px;max-height:calc(100vh - 80px);overflow:auto;padding-bottom:4px}
+.card{padding:16px}
+.card h2{font-size:20px;font-weight:700}
+.card .sub{color:var(--muted);font-size:14px;margin:2px 0 12px}
+.tier{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center;padding:12px 0;border-top:1px solid var(--line)}
+.tier .l{font:600 13px/1.25 var(--display);letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+.tier .a{font:700 28px/1.1 var(--display)}
+.tier .e{font-size:13px;color:var(--muted)}
+.tier .btn{grid-row:1 / span 3;grid-column:2}
+.tier.min .a{color:var(--accent)}
+dl.brk{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 12px;margin:12px 0 0;padding-top:12px;border-top:1px solid var(--line);font-size:15px}
+dl.brk dt{color:var(--muted)} dl.brk dd{margin:0;text-align:right;font-weight:500}
+dl.brk .tot{color:var(--ink);font-weight:600}
+.hy{display:flex;align-items:center;gap:8px;justify-content:flex-end}
+.hy input{width:96px;height:36px;border:1px solid var(--line);border-radius:8px;background:var(--surface);text-align:right;padding:0 8px}
+.hint{font-size:13px;color:var(--muted);grid-column:1 / -1;margin-top:-4px}
+.pohead{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.line{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;padding:10px 0;border-top:1px solid var(--line)}
+.line .src{font:600 12px/1.2 var(--display);letter-spacing:.05em;text-transform:uppercase;color:var(--accent)}
+.line .jump{all:unset;cursor:pointer;font-size:14px;overflow-wrap:anywhere;display:block}
+.line .jump:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.line .m{font-size:13px;color:var(--muted)}
+.line .x{width:36px;height:36px;border-radius:8px;border:1px solid var(--line);background:var(--surface);grid-row:1 / span 3;grid-column:2;align-self:center;font-size:18px;line-height:1}
+.lab{margin-top:10px;padding-top:10px;border-top:1px solid var(--line);font-size:14px;color:var(--muted)}
+
+.bar{display:none}
+.toast{position:fixed;left:50%;bottom:84px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;font-weight:500;z-index:30;max-width:calc(100% - 32px);text-align:center}
+.veil{position:fixed;inset:0;background:rgba(8,16,20,.55);z-index:20;display:flex;align-items:center;justify-content:center;padding:16px}
+.modal{background:var(--surface);border-radius:12px;max-width:520px;width:100%;padding:20px;max-height:100%;overflow:auto;display:grid;gap:12px}
+.modal h2{font-size:22px}
+.modal p{margin:0}
+.modal ul{margin:0;padding-left:20px}
+.modal textarea{width:100%;height:220px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:13px/1.4 ui-monospace,Menlo,Consolas,monospace;padding:8px}
+.modal .actions{justify-content:flex-end}
+.err{color:var(--bad)}
+[hidden]{display:none !important}
+
+@media (max-width:980px){
+  .layout{grid-template-columns:minmax(0,1fr);padding-bottom:96px}
+  aside{position:static;max-height:none;overflow:visible}
+  .bar{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:10;background:var(--surface);border-top:1px solid var(--line);padding:10px 16px;gap:12px;align-items:center;justify-content:space-between}
+  .bar .t{font:700 22px/1.1 var(--display)}
+  .bar .c{font-size:13px;color:var(--muted)}
+}
+@media (max-width:520px){
+  .item{grid-template-columns:minmax(0,1fr) auto}
+  .item .d{grid-column:1 / -1}
+  .item .p{text-align:left}
+  .top h1{font-size:24px}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>REV Job Pricer</h1>
+      <div class="list" id="listInfo"></div>
+    </div>
+    <div class="actions">
+      <button class="btn" id="btnUpload" type="button">Update price list</button>
+      <button class="btn" id="btnClear" type="button">Clear job</button>
+      <input type="file" id="file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
+    </div>
+  </header>
+</div>
+
+<nav class="cats" aria-label="Product categories"><div class="row" id="cats"></div></nav>
+
+<div class="wrap">
+  <div class="layout">
+    <main>
+      <div class="find">
+        <input id="search" type="search" placeholder="Search every category by model number or description" autocomplete="off" aria-label="Search products">
+      </div>
+      <div class="panel" id="items"></div>
+    </main>
+
+    <aside id="summary">
+      <section class="panel card" aria-labelledby="hPrice">
+        <h2 id="hPrice">Job price</h2>
+        <div class="sub" id="priceSub"></div>
+        <div id="tiers"></div>
+        <dl class="brk" id="brk"></dl>
+      </section>
+      <section class="panel card" aria-labelledby="hPO">
+        <h2 id="hPO">PO line item notes</h2>
+        <div class="sub" id="poSub"></div>
+        <div class="pohead">
+          <button class="btn primary" id="btnNotes" type="button">Copy notes</button>
+          <button class="btn" id="btnTable" type="button">Copy as table with prices</button>
+        </div>
+        <div id="po"></div>
+      </section>
+    </aside>
+  </div>
+</div>
+
+<div class="bar">
+  <div><div class="t" id="barTotal"></div><div class="c" id="barCount"></div></div>
+  <button class="btn primary" id="btnJump" type="button">Price and PO</button>
+</div>
+
+<div class="veil" id="veil" hidden><div class="modal" role="dialog" aria-modal="true" aria-labelledby="mTitle" id="modal"></div></div>
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script>/* ===== Workbook reader + pricing math (no dependencies) ===== */
+var RevLib = (function () {
+  'use strict';
+
+  /* ---------- inflate (raw DEFLATE), used when the browser has no DecompressionStream ---------- */
+  function inflateRaw(src, outSize) {
+    var out = new Uint8Array(outSize || src.length * 8), op = 0;
+    var ip = 0, bitBuf = 0, bitCnt = 0;
+    function need(n) { if (op + n > out.length) { var b = new Uint8Array(Math.max(out.length * 2, op + n)); b.set(out); out = b; } }
+    function bits(n) {
+      var v = bitBuf;
+      while (bitCnt < n) {
+        if (ip >= src.length) throw new Error('Unexpected end of compressed data');
+        v |= src[ip++] << bitCnt; bitCnt += 8;
+      }
+      bitBuf = v >>> n; bitCnt -= n;
+      return v & ((1 << n) - 1);
+    }
+    function construct(lengths, off, n) {
+      var count = new Uint16Array(16), symbol = new Uint16Array(n), offs = new Uint16Array(16), i;
+      for (i = 0; i < n; i++) count[lengths[off + i]]++;
+      count[0] = 0;
+      for (i = 1; i < 16; i++) offs[i] = offs[i - 1] + count[i - 1];
+      for (i = 0; i < n; i++) if (lengths[off + i]) symbol[offs[lengths[off + i]]++] = i;
+      return { count: count, symbol: symbol };
+    }
+    function decode(h) {
+      var code = 0, first = 0, index = 0;
+      for (var len = 1; len <= 15; len++) {
+        code |= bits(1);
+        var c = h.count[len];
+        if (code - c < first) return h.symbol[index + (code - first)];
+        index += c; first += c; first <<= 1; code <<= 1;
+      }
+      throw new Error('Bad compressed data');
+    }
+    var LBASE = [3,4,5,6,7,8,9,10,11,13,15,17,19,23,27,31,35,43,51,59,67,83,99,115,131,163,195,227,258];
+    var LEXT = [0,0,0,0,0,0,0,0,1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,5,5,5,5,0];
+    var DBASE = [1,2,3,4,5,7,9,13,17,25,33,49,65,97,129,193,257,385,513,769,1025,1537,2049,3073,4097,6145,8193,12289,16385,24577];
+    var DEXT = [0,0,0,0,1,1,2,2,3,3,4,4,5,5,6,6,7,7,8,8,9,9,10,10,11,11,12,12,13,13];
+    var ORDER = [16,17,18,0,8,7,9,6,10,5,11,4,12,3,13,2,14,1,15];
+    var fixedL = null, fixedD = null;
+    function codes(lh, dh) {
+      for (;;) {
+        var sym = decode(lh);
+        if (sym < 256) { need(1); out[op++] = sym; }
+        else if (sym === 256) return;
+        else {
+          sym -= 257;
+          if (sym >= 29) throw new Error('Bad compressed data');
+          var len = LBASE[sym] + bits(LEXT[sym]);
+          var ds = decode(dh);
+          if (ds >= 30) throw new Error('Bad compressed data');
+          var dist = DBASE[ds] + bits(DEXT[ds]);
+          if (dist > op) throw new Error('Bad compressed data');
+          need(len);
+          for (var k = 0; k < len; k++, op++) out[op] = out[op - dist];
+        }
+      }
+    }
+    var last;
+    do {
+      last = bits(1);
+      var type = bits(2);
+      if (type === 0) {
+        bitBuf = 0; bitCnt = 0;
+        var len = src[ip] | (src[ip + 1] << 8); ip += 4;
+        need(len); out.set(src.subarray(ip, ip + len), op); op += len; ip += len;
+      } else if (type === 1) {
+        if (!fixedL) {
+          var l = new Uint8Array(288 + 30), i;
+          for (i = 0; i < 144; i++) l[i] = 8;
+          for (; i < 256; i++) l[i] = 9;
+          for (; i < 280; i++) l[i] = 7;
+          for (; i < 288; i++) l[i] = 8;
+          for (i = 0; i < 30; i++) l[288 + i] = 5;
+          fixedL = construct(l, 0, 288); fixedD = construct(l, 288, 30);
+        }
+        codes(fixedL, fixedD);
+      } else if (type === 2) {
+        var nlen = bits(5) + 257, ndist = bits(5) + 1, ncode = bits(4) + 4;
+        var lengths = new Uint8Array(320), idx;
+        for (idx = 0; idx < ncode; idx++) lengths[ORDER[idx]] = bits(3);
+        var ch = construct(lengths, 0, 19);
+        lengths = new Uint8Array(320); idx = 0;
+        while (idx < nlen + ndist) {
+          var s = decode(ch), rep, val = 0;
+          if (s < 16) { lengths[idx++] = s; continue; }
+          if (s === 16) { if (!idx) throw new Error('Bad compressed data'); val = lengths[idx - 1]; rep = 3 + bits(2); }
+          else if (s === 17) rep = 3 + bits(3);
+          else rep = 11 + bits(7);
+          if (idx + rep > nlen + ndist) throw new Error('Bad compressed data');
+          while (rep--) lengths[idx++] = val;
+        }
+        codes(construct(lengths, 0, nlen), construct(lengths, nlen, ndist));
+      } else throw new Error('Bad compressed data');
+    } while (!last);
+    return out.subarray(0, op);
+  }
+
+  /* ---------- zip ---------- */
+  function readZip(buf) {
+    var u8 = new Uint8Array(buf), dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+    var eocd = -1;
+    for (var i = u8.length - 22; i >= Math.max(0, u8.length - 66000); i--) {
+      if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+    }
+    if (eocd < 0) throw new Error('NOT_XLSX');
+    var n = dv.getUint16(eocd + 10, true), p = dv.getUint32(eocd + 16, true), files = {};
+    var td = new TextDecoder('utf-8');
+    for (var k = 0; k < n; k++) {
+      if (dv.getUint32(p, true) !== 0x02014b50) throw new Error('NOT_XLSX');
+      var method = dv.getUint16(p + 10, true), csize = dv.getUint32(p + 20, true), usize = dv.getUint32(p + 24, true);
+      var nl = dv.getUint16(p + 28, true), el = dv.getUint16(p + 30, true), cl = dv.getUint16(p + 32, true);
+      var lho = dv.getUint32(p + 42, true);
+      var name = td.decode(u8.subarray(p + 46, p + 46 + nl));
+      files[name] = { method: method, csize: csize, usize: usize, lho: lho };
+      p += 46 + nl + el + cl;
+    }
+    async function text(name) {
+      var f = files[name];
+      if (!f) return null;
+      var o = f.lho, start = o + 30 + dv.getUint16(o + 26, true) + dv.getUint16(o + 28, true);
+      var raw = u8.subarray(start, start + f.csize), data;
+      if (f.method === 0) data = raw;
+      else if (f.method === 8) {
+        data = null;
+        if (typeof DecompressionStream === 'function' && !readZip.forceJs) {
+          try {
+            var stream = new Blob([raw]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+            data = new Uint8Array(await new Response(stream).arrayBuffer());
+          } catch (e) { data = null; }
+        }
+        if (!data) data = inflateRaw(raw, f.usize);
+      } else throw new Error('NOT_XLSX');
+      return td.decode(data);
+    }
+    return { files: files, text: text };
+  }
+
+  /* ---------- xml helpers ---------- */
+  function unesc(s) {
+    if (s.indexOf('&') >= 0) {
+      s = s.replace(/&(#x[0-9a-fA-F]+|#\d+|amp|lt|gt|quot|apos);/g, function (m, e) {
+        if (e === 'amp') return '&'; if (e === 'lt') return '<'; if (e === 'gt') return '>';
+        if (e === 'quot') return '"'; if (e === 'apos') return "'";
+        return String.fromCodePoint(e.charAt(1) === 'x' ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10));
+      });
+    }
+    if (s.indexOf('_x') >= 0) s = s.replace(/_x([0-9A-Fa-f]{4})_/g, function (m, h) { return String.fromCharCode(parseInt(h, 16)); });
+    return s;
+  }
+  function attr(tag, name) {
+    var m = new RegExp('(?:^|\\s)' + name + '="([^"]*)"').exec(tag);
+    return m ? unesc(m[1]) : null;
+  }
+  function allT(xml) {
+    var out = '', re = /<t\b[^>]*?(?:\/>|>([\s\S]*?)<\/t>)/g, m;
+    while ((m = re.exec(xml))) out += m[1] ? unesc(m[1]) : '';
+    return out;
+  }
+  function sharedStrings(xml) {
+    var list = [];
+    if (!xml) return list;
+    var re = /<si\b[^>]*?(?:\/>|>([\s\S]*?)<\/si>)/g, m;
+    while ((m = re.exec(xml))) list.push(m[1] ? allT(m[1].replace(/<rPh\b[\s\S]*?<\/rPh>/g, '')) : '');
+    return list;
+  }
+  function sheetCells(xml, sst) {
+    var cells = {}, maxRow = 0;
+    var a = xml.indexOf('<sheetData'), b = xml.indexOf('</sheetData>');
+    if (a < 0 || b < 0) return { cells: cells, maxRow: 0 };
+    var body = xml.slice(a, b), re = /<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g, m;
+    while ((m = re.exec(body))) {
+      var ref = attr(m[1], 'r'), inner = m[2];
+      if (!ref || !inner) continue;
+      var t = attr(m[1], 't'), cell = {};
+      var fm = /<f\b[^>]*?(?:\/>|>([\s\S]*?)<\/f>)/.exec(inner);
+      if (fm && fm[1]) cell.f = unesc(fm[1]);
+      var vm = /<v\b[^>]*>([\s\S]*?)<\/v>/.exec(inner);
+      if (t === 'inlineStr') cell.v = allT(inner);
+      else if (vm) {
+        var raw = unesc(vm[1]);
+        if (t === 's') cell.v = sst[parseInt(raw, 10)] || '';
+        else if (t === 'str' || t === 'e') cell.v = raw;
+        else if (t === 'b') cell.v = raw === '1';
+        else { var num = Number(raw); cell.v = isNaN(num) ? raw : num; }
+      }
+      if (cell.v === undefined && cell.f === undefined) continue;
+      cells[ref] = cell;
+      var row = parseInt(ref.replace(/^[A-Z]+/, ''), 10);
+      if (row > maxRow) maxRow = row;
+    }
+    return { cells: cells, maxRow: maxRow };
+  }
+  function str(c) { return c && typeof c.v === 'string' ? c.v : ''; }
+  function num(c) {
+    if (!c || c.v === undefined || c.v === '' || c.v === true || c.v === false) return null;
+    if (typeof c.v === 'number') return c.v;
+    var s = String(c.v).replace(/[$,\s]/g, '');
+    if (s === '' || isNaN(Number(s))) return null;
+    return Number(s);
+  }
+  function mult(c) {            /* the multiplier in a formula like  D28*2.857  */
+    if (!c || !c.f) return null;
+    var m = /\*\s*(\d+(?:\.\d+)?)\s*$/.exec(c.f);
+    return m ? Number(m[1]) : null;
+  }
+
+  var DEFAULTS = {
+    markup: 2.857, tax: 0.06,
+    tiers: [
+      { label: 'EVERY DAY LOW PRICE OFFERED FOR 1 YEAR', mult: 2, days: 365 },
+      { label: 'PROMOTIONAL PRICE OFFERED FOR 30 DAYS', mult: 1.55, days: 30 },
+      { label: 'INITIAL VISIT DISCOUNT OFFERED TODAY', mult: 1, days: 0 }
+    ]
+  };
+
+  /* ---------- workbook -> price list ---------- */
+  async function parseWorkbook(buf, fileName) {
+    var zip = readZip(buf);
+    var wb = await zip.text('xl/workbook.xml'), rels = await zip.text('xl/_rels/workbook.xml.rels');
+    if (!wb || !rels) throw new Error('NOT_XLSX');
+    var sst = sharedStrings(await zip.text('xl/sharedStrings.xml'));
+    var relMap = {}, m, re = /<Relationship\b([^>]*?)\/?>/g;
+    while ((m = re.exec(rels))) relMap[attr(m[1], 'Id')] = attr(m[1], 'Target');
+    var sheets = [], addendum = null;
+    re = /<sheet\b([^>]*?)\/?>/g;
+    var sheetsXml = wb.slice(wb.indexOf('<sheets'), wb.indexOf('</sheets>'));
+    while ((m = re.exec(sheetsXml))) {
+      var name = attr(m[1], 'name'), target = relMap[attr(m[1], 'r:id')];
+      if (!name || !target) continue;
+      var path = target.charAt(0) === '/' ? target.slice(1) : 'xl/' + target;
+      var xml = await zip.text(path);
+      if (!xml) continue;
+      var sc = sheetCells(xml, sst), c = sc.cells;
+      if (/addendum/i.test(name)) { addendum = c; continue; }
+      /* A priced tab has "Price" or "Cost" heading column B on row 1 */
+      if (!/^\s*(price|cost)\b/i.test(str(c.B1))) continue;
+      var sheet = { name: name.trim(), labor: /labou?r/i.test(name) || /^\s*cost\b/i.test(str(c.B1)), markup: null, rows: [] };
+      for (var r = 2; r <= sc.maxRow; r++) {
+        if (/sub\s*cost/i.test(str(c['C' + r]))) { sheet.markup = mult(c['G' + r]); break; }
+        var desc = str(c['A' + r]).replace(/\s+/g, ' ').trim();
+        if (!desc) continue;
+        var price = num(c['B' + r]);
+        sheet.rows.push(price === null ? [desc] : [desc, price]);
+      }
+      if (sheet.rows.some(function (x) { return x.length === 2; })) sheets.push(sheet);
+    }
+    if (!sheets.length) throw new Error('NO_PRICES');
+    var list = { file: fileName || 'workbook.xlsx', at: Date.now(), markup: DEFAULTS.markup, tax: DEFAULTS.tax,
+                 tiers: JSON.parse(JSON.stringify(DEFAULTS.tiers)), sheets: sheets };
+    var seen = sheets.map(function (s) { return s.markup; }).filter(function (x) { return x; });
+    if (seen.length) list.markup = seen[0];
+    sheets.forEach(function (s) { if (!s.markup) s.markup = list.markup; });
+    if (addendum) {
+      var tx = mult(addendum.H7); if (tx !== null && tx < 1) list.tax = tx;
+      var ks = [num(addendum.K1), num(addendum.K2), num(addendum.K3)];
+      var base = Math.min.apply(null, ks.filter(function (x) { return x !== null; }));
+      for (var i = 0; i < 3; i++) {
+        var lab = str(addendum['B' + (i + 1)]).trim(), f = addendum['I' + (i + 1)];
+        if (!lab || !f || !f.f) continue;
+        var mu = mult(f);
+        list.tiers[i] = { label: lab, mult: mu === null ? 1 : mu, days: ks[i] !== null && isFinite(base) ? Math.round(ks[i] - base) : DEFAULTS.tiers[i].days };
+      }
+    }
+    return list;
+  }
+
+  /* ---------- keys, counts, diff ---------- */
+  function eachItem(list, fn) {
+    list.sheets.forEach(function (s, si) {
+      var dup = {}, section = '';
+      s.rows.forEach(function (row, ri) {
+        if (row.length === 1) { section = row[0]; return; }
+        var n = dup[row[0]] = (dup[row[0]] || 0) + 1;
+        fn({ key: s.name + '␟' + row[0] + (n > 1 ? '␟' + n : ''), sheet: s, si: si, ri: ri, desc: row[0], price: row[1], section: section });
+      });
+    });
+  }
+  function countItems(list) { var n = 0; eachItem(list, function () { n++; }); return n; }
+  function diff(oldList, newList) {
+    var old = {}, d = { changed: 0, added: 0, removed: 0, same: 0 };
+    eachItem(oldList, function (it) { old[it.key] = it.price; });
+    eachItem(newList, function (it) {
+      if (!(it.key in old)) d.added++;
+      else { if (Math.abs(old[it.key] - it.price) > 1e-9) d.changed++; else d.same++; delete old[it.key]; }
+    });
+    d.removed = Object.keys(old).length;
+    return d;
+  }
+
+  /* ---------- the workbook's math ---------- */
+  function price(list, qty, hybrid) {
+    var lines = [], matCost = 0, matSell = 0, labCost = 0, labSell = 0, per = {};
+    eachItem(list, function (it) {
+      var q = qty[it.key];
+      if (!(q > 0)) return;
+      var total = q * it.price;
+      per[it.sheet.name] = (per[it.sheet.name] || 0) + 1;
+      if (it.sheet.labor) { labCost += total; labSell += total * it.sheet.markup; }
+      else { matCost += total; matSell += total * it.sheet.markup; }
+      lines.push({ key: it.key, sheet: it.sheet.name, labor: it.sheet.labor, desc: it.desc, price: it.price, qty: q, total: total });
+    });
+    var hy = hybrid > 0 ? hybrid : 0, minSell = matSell + labSell + hy;
+    return {
+      lines: lines, perSheet: per, matCost: matCost, matSell: matSell, labCost: labCost, labSell: labSell, hybrid: hy,
+      minSell: minSell, tax: matSell * list.tax, matWithTax: matSell * (1 + list.tax),
+      tiers: list.tiers.map(function (t) { return { label: t.label, mult: t.mult, days: t.days, amount: minSell * t.mult }; })
+    };
+  }
+
+  return { parseWorkbook: parseWorkbook, readZip: readZip, eachItem: eachItem, countItems: countItems, diff: diff, price: price };
+})();
+</script>
+<script>
+(function(){
+'use strict';
+var BUILTIN = {"file":"REV_Home_Rep_Facing_Workbook_Auto_PO.xlsx","at":1794949069096,"markup":2.857,"tax":0.06,"tiers":[{"label":"EVERY DAY LOW PRICE OFFERED FOR 1 YEAR","mult":2,"days":365},{"label":"PROMOTIONAL PRICE OFFERED FOR 30 DAYS","mult":1.55,"days":30},{"label":"INITIAL VISIT DISCOUNT OFFERED TODAY","mult":1,"days":0}],"sheets":[{"name":"Acrylic Walls","labor":false,"markup":2.857,"rows":[["SIGNATURE SERIES WALLS"],["REV SIGNATURE SERIES MB-ABB-JWT120-6598 ACRYLIC WHITE BACK WALL 98\"x65\"",255],["REV SIGNATURE SERIES MB-ABB-JWT120-4098HB ACRYLIC WHITE SIDE WALL 98\"x40\". COMES WITH 1 1/2\" BEND",140],["REV SIGNATURE SERIES MB-ABB-TUN120-65985 ACRYLIC TUNDRA BACK WALL 98\"X65\"",315],["REV SIGNATURE SERIES MB-ABB-TUB120-40985HB ACRYLIC TUNDRA SIDE WALL 98\"x40\". COMES WITH 1 1/2\" BEND.",185],["REV SIGNATURE SERIES MB-ABB-CAL120-65985 ACRYLIC CALCUTTA BACK WALL 98\"X65\"",315],["REV SIGNATURE SERIES MB-ABB-CAL120-40985HB ACRYLIC CALCUTTA SIDE WALL 98\"x40\". COMES WITH 1 1/2\" BEND.",185],["REV SIGNATURE SERIES MB-ABB-CON120-65985 ACRYLIC CONCRETE BACK WALL 98\"X65\"",315],["REV SIGNATURE SERIES MB-ABB-CON120-40985HB ACRYLIC CONCRETE SIDE WALL 98\"x40\". COMES WITH 1 1/2\" BEND.",185],["REV SIGNATURE SERIES MB-ABB-TRA120-65985 ACRYLIC TRAVERTINE BACK WALL 98\"X65\"",315],["REV SIGNATURE SERIES MB-ABB-TRA40985HB ACRYLIC TRAVERTINE SIDE WALL 98\"x40\". COMES WITH 1 1/2\" BEND.",185],["BLACK ETCHED WALLS"],["REV SIGNATURE SERIES MB-BA-WP61E-3X6-FWT-BLK WHITE 3\"X6\" SUBWAY TILE ETCHED BLACK GROUT BACK WALL PANEL 61\"X98\"X.125\"",359.95],["REV SIGNATURE SERIES MB-BA-WP-40E-3X6-FWT-BLK WHITE 3\"X6\" SUBWAY TILE ETCHED BLACK GROUT SIDE WALL PANEL 40\"X98\"X.125\". COMES WITH 1 1/2\" BEND",195],["REV SIGNATURE SERIES MB-BA-WP61E-11X20-FWT-BLK WHITE 11\"X20\" TILE ETCHED BLACK GROUT BACK WALL PANEL 61\"X98\"X.125\"",359.95],["REV SIGNATURE SERIES MB-BA-WP40E-11X20-FWT-BLK WHITE 11\"X20\" TILE ETCHED BLACK GROUT SIDE WALL PANEL 42\"X98\"X.125\". COMES WITH 1 1/2\" BEND.",195],["GRAY ETCHED WALLS"],["REV SIGNATURE SERIES MB-BA-WP61E-3X6-FWT-GRA WHITE 3\"X6\" SUBWAY TILE ETCHED GRAY GROUT BACK WALL PANEL 61\"X98\"X.125\"",359.95],["REV SIGNATURE SERIES MB-BA-WP40E-3X6-FWT-GRA WHITE 3\"X6\" SUBWAY TILE ETCHED GRAY GROUT SIDE WALL PANEL 40\"X98\"X.125\". COMES WITH 1 1/2\" BEND.",195],["REV SIGNATURE SERIES MB-BA-WP61E-11X20-FWT-GRA WHITE 11\"X20\" TILE ETCHED GRAY GROUT BACK WALL PANEL 61\"X98\"X.125\"",359.95],["REV SIGNATURE SERIES MB-BA-WP40E-11X20-FWT-GRA WHITE 11\"X20\" TILE ETCHED GRAY GROUT SIDE WALL PANEL 40\"X98\"X.125\". COMES WITH 1 1/2\" BEND.",195],["WHITE ETCHED WALLS"],["REV SIGNATURE SERIES MB-BA-WP61E-3X6-FWT-WHT WHITE 3\"X6\" SUBWAY TILE ETCHED WHITE GROUT BACK WALL PANEL 61\"X98\"X.125\"",359.95],["REV SIGNATURE SERIES MB-BA-WP40E-3X6-FWT-WHT WHITE 3\"X6\" SUBWAY TILE ETCHED WHITE GROUT SIDE WALL PANEL 40\"X98\"X.125\". COMES WITH 1 1/2\" BEND",195],["REV SIGNATURE SERIES MB-BA-WP61E-11X20-FWT-WHT WHITE 11\"X20\" SUBWAY TILE ETCHED WHITE GROUT BACK WALL PANEL 61\"X98\"X.125\"",359.95],["REV SIGNATURE SERIES MB-BA-WP40E-11X20-FWT-WHT WHITE 11\"X20\" SUBWAY TILE ETCHED WHITE GROUT SIDE WALL PANEL 40\"X98\"X.125\". COMES WITH 1 1/2\" BEND",195]]},{"name":"Acrylic Accessories","labor":false,"markup":2.857,"rows":[["REV SIGNATURE SERIES ACRYLIC CORNER SHELVES"],["AST-W REV ACRYLIC WHITE SINGLE TIER SHELF (Requires shelf and Bracket)",22.95],["AST-TUN REV SIGNATURE SERIES ACRYLIC TUNDRA SINGLE TIER SHELF (Requires shelf and Bracket)",27.95],["AST-CAL REV SIGNATURE SERIES ACRYLIC CALCUTTA SINGLE TIER SHELF (Requires shelf and Bracket)",27.95],["AST-CON REV SIGNATURE SERIES ACRYLIC CONCRETE SINGLE TIER SHELF (Requires shelf and Bracket)",27.95],["AST-TRA REV SIGNATURE SERIES ACRYLIC TRAVERTINE SINGLE TIER SHELF (Requires shelf and Bracket)",27.95],["REV SIGNATURE SERIES ACRYLIC SEAM TRIMS"],["SMT-W WHITE REV ACRYLIC SEAM TRIM",34.877],["SMT-TUN TUNDRA REV SIGNATURE SERIES ACRYLIC SEAM TRIM",48],["SMT-CAL CALCUTTA REV SIGNATURE SERIES ACRYLIC SEAM TRIM",48],["SMT-CON CONCRETE REV SIGNATURE SERIES ACRYLIC SEAM TRIM",48],["SMT-TRA TRAVERTINE REV SIGNATURE SERIES ACRYLIC SEAM TRIM",48],["REV SIGNATURE SERIES ACRYLIC OUTSIDE CORNER TRIMS"],["OCT-W WHITE REV ACRYLIC OUTSIDE CORNER TRIM",41.031],["OCT-TUN TUNDRA REV SIGNATURE SERIES ACRYLIC OUTSIDE CORNER TRIM",54.154],["OCT-CAL CALCUTTA REV SIGNATURE SERIES ACRYLIC OUTSIDE CORNER TRIM",54.154],["OCT-CON CONCRETE REV SIGNATURE SERIES ACRYLIC OUTSIDE CORNER TRIM",54.154],["OCT-TRA TRAVERTINE REV SIGNATURE SERIES ACRYLIC OUTSIDE CORNER TRIM",54.154],["REV SIGNATURE SERIES ACRYLIC WINDOW KITS"],["WK-W WHITE REV ACRYLIC WINDOW KIT",156.25],["WK-TUN TUNDRA REV SIGNATURE SERIES ACRYLIC WINDOW KIT",206.25],["WK-CAL CALCUTTA REV SIGNATURE SERIES ACRYLIC WINDOW KIT",206.25],["WK-CON CONCRETE REV SIGNATURE SERIES ACRYLIC WINDOW KIT",206.25],["WK-TRA TRAVERTINE REV SIGNATURE SERIES ACRYLIC WINDOW KIT",206.25],["REV SIGNATURE SERIES ACRYLIC RIGHT HAND SEATS"],["BRK-R REV SIGNATURE SERIES ACRYLIC RIGHT HAND SEAT BRACKET",132.5],["CAP-RH-W REV SIGNATURE SERIES ACRYLIC WHITE RIGHT HAND SEAT CAP",163.125],["CAP-RH-TUN REV SIGNATURE SERIES ACRYLIC TUNDRA RIGHT HAND SEAT CAP",193],["CAP-RH-CAL REV SIGNATURE SERIES ACRYLIC CALCUTTA RIGHT HAND SEAT CAP",193],["CAP-RH-CON REV SIGNATURE SERIES ACRYLIC CONCRETE RIGHT HAND SEAT CAP",193],["CAP-RH-TRA REV SIGNATURE SERIES ACRYLIC TRAVERTINE RIGHT HAND SEAT CAP",193],["REV SIGNATURE SERIES ACRYLIC LEFT HAND SEATS"],["BRK-L REV SIGNATURE SERIES ACRYLIC LEFT HAND SEAT BRACKET",132.5],["CAP-LH-W REV SIGNATURE SERIES ACRYLIC WHITE LEFT HAND SEAT CAP",163.125],["CAP-LH-TUN REV SIGNATURE SERIES ACRYLIC TUNDRA LEFT HAND SEAT CAP",193],["CAP-LH-CAL REV SIGNATURE SERIES ACRYLIC CALCUTTA LEFT HAND SEAT CAP",193],["CAP-LH-CON REV SIGNATURE SERIES ACRYLIC CONCRETE LEFT HAND SEAT CAP",193],["CAP-LH-TRA REV SIGNATURE SERIES ACRYLIC TRAVERTINE LEFT HAND SEAT CAP",193],["INSIDE CORNER TRIMS"],["ICT-W WHITE REV SIGNATURE SERIES ACRYLIC INSIDE CORNER TRIM",41.031],["ICT-TUN TUNDRA REV SIGNATURE SERIES ACRYLIC INSIDE CORNER TRIM",54.154],["ICT-CAL CALCUTTA REV SIGNATURE SERIES ACRYLIC INSIDE CORNER TRIM",54.154],["ICT-CON CONCRETE REV SIGNATURE SERIES ACRYLIC INSIDE CORNER TRIM",54.154],["ICT-TRAVERTINE REV SIGNATURE SERIES ACRYLIC INSIDE CORNER TRIM",54.154],["ICT-CAL CALCUTTA REV SIGNATURE SERIES ACRYLIC INSIDE CORNER TRIM",54.154]]},{"name":"Accessories","labor":false,"markup":2.857,"rows":[["COMPOSITE SEAT SILVER FRAME"],["CP4-SEAT-WS 4 PIECE WHITE COMPOSITE SEAT SILVER FRAME",250],["CP4-SEAT-PS 4 PIECE PUTTY COMPOSITE SEAT SILVER FRAME",250],["CP4-SEAT-AGS 4 PIECE ANCHOR GRAY COMPOSITE SEAT SILVER FRAME",250],["CP4-SEAT-HS 4 PIECE HARBORWOOD COMPOSITE SEAT SILVER FRAME",250],["CP4-SEAT-BS 4 PIECE BLACK COMPOSITE SEAT SILVER FRAME",250],["COMPOSITE SEAT MATTE BLACK FRAME"],["CP4-SEAT-WMB 4 PIECE WHITE COMPOSITE SEAT MATTE BLACK FRAME",250],["CP4-SEAT-PMB 4 PIECE PUTTY COMPOSITE SEAT MATTE BLACK FRAME",250],["CP4-SEAT-AGMB 4 PIECE ANCHOR GRAY COMPOSITE SEAT MATTE BLACK FRAME",250],["CP4-SEAT-HMB 4 PIECE HABORWOOD COMPOSITE SEAT MATTE BLACK FRAME",250],["CP4-SEAT-BMB 4 PIECE BLACK COMPOSITE SEAT MATTE BLACK FRAME",250],["COMPOSITE SEAT WHITE FRAME"],["CP4-SEAT-WW 4 PIECE WHITE COMPOSITE SEAT WHITE FRAME",250],["CP4-SEAT-PW 4 PIECE PUTTY COMPOSITE SEAT WHITE FRAME",250],["CP4-SEAT-AGW 4 PIECE ANCHOR GRAY COMPOSITE SEAT WHITE FRAME",250],["CP4-SEAT-HW 4 PIECE HARBORWOOD COMPOSITE SEAT WHITE FRAME",250],["CP4-SEAT-BW 4 PIECE BLACK COMPOSITE SEAT WHITE FRAME",250],["FOOT PEDESTAL"],["SFR-C CHROME FOOT PEDESTAL",24.247],["SFR-BN BRUSHED NICKEL FOOT PEDESTAL",25.954],["SFR-MB MATTE BLACK FOOT PEDESTAL",27.031],["12\" SIGNATURE GRAB BARS"],["S12-BN 12\" SIGNATURE GRAB BAR BRUSHED NICKEL",65.715],["S12-C 12\" SIGNATURE GRAB BAR CHROME",58.572],["S12-MB 12\" SIGNATURE GRAB BAR MATTE BLACK",72.858],["18\" SIGNATURE GRAB BARS"],["S18-BN 18\" SIGNATURE GRAB BAR BRUSHED NICKEL",70],["S18-C 18\" SIGNATURE GRAB BAR CHROME",60],["S18-MB 18\" SIGNATURE GRAB BAR MATTE BLACK",75.715],["24\" SIGNATURE GRAB BARS"],["S24-BN 24\" SIGNATURE GRAB BAR BRUSHED NICKEL",74.286],["S24-C 24\" SIGNATURE GRAB BAR CHROME",67.143],["S24-MB 24\" SIGNATURE GRAB BAR MATTE BLACK",80],["12 X 12 NICHE"],["REV S-1212-MB 12X12 MATTE BLACK 304 STAINLESS STEEL WATERPROOF NICHE",104],["REV S-1212-SS 12X12 304 STAINLESS STEEL WATERPROOF NICHE",104],["REV S-1212-W 12X12 WHITE 304 STAINLESS STEEL WATERPROOF NICHE",104],["12 X 24 SINGLE NICHE"],["REV S-1224-MB 12X24 MATTE BLACK 304 STAINLESS STEEL WATERPROOF SINGLE NICHE INSTALLS VERTICALLY OR HORIZONTALLY",122.667],["REV S-1224-SS 12X24 304 STAINLESS STEEL WATERPROOF SINGLE NICHE INSTALLS VERTICALLY OR HORIZONTALLY NICHE-12X24OPEN-SS",122.667],["REV S-1224-W 12X24 WHITE 304 STAINLESS STEEL WATERPROOF SINGLE NICHE INSTALLS VERTICALLY OR HORIZONTALLY",122.667],["12 X 24 DOUBLE NICHE"],["REV D-1224-MB 12X24 MATTE BLACK 304 STAINLESS STEEL WATERPROOF DOUBLE NICHE INSTALLS VERTICALLY OR HORIZONTALLY",133.334],["REV D-1224-SS 12X24 STAINLESS STEEL 304 STAINLESS STEEL WATERPROOF DOUBLE NICHE INSTALLS VERTICALLY OR HORIZONTALLY",133.334],["REV D-1224-W 12X24 WHITE 304 STAINLESS STEEL WATERPROOF DOUBLE NICHE INSTALLS VERTICALLY OR HORIZONTALLY",133.334],["12 X 36 SINGLE NICHE"],["REV S-1236-MB 12X36 MATTE BLACK 304 STAINLESS STEEL WATERPROOF SINGLE NICHE INSTALLS VERTICALLY OR HORIZONTALLY",141.334],["REV S-1236-SS 12X36 304 STAINLESS STEEL WATERPROOF SINGLE NICHE INSTALLS VERTICALLY OR HORIZONTALLY",141.334],["REV S-1236-W 12X36 WHITE 304 STAINLESS STEEL WATERPROOF SINGLE NICHE INSTALLS VERTICALLY OR HORIZONTALLY",141.334],["12 X 42 SINGLE NICHE"],["REV S-1242-MB 12X42 MATTE BLACK 304 STAINLESS STEEL WATERPROOF SINGLE NICHE INSTALLS VERTICALLY OR HORIZONTALLY",150.667],["REV S-1242-SS 12X42 304 STAINLESS STEEL WATERPROOF SINGLE NICHE INSTALLS VERTICALLY OR HORIZONTALLY",150.667],["REV S-1242-W 12X42 WHITE 304 STAINLESS STEEL WATERPROOF SINGLE NICHE INSTALLS VERTICALLY OR HORIZONTALLY",150.667],["METAL CORNER SHELVES"],["BA-C CHROME CORNER SHELF",17.739],["BA-BN BRUSHED NICKEL CORNER SHELF",19.447],["BA-MB MATTE BLACK CORNER SHELF",20.524],["CHROME GRAB BARS 12, 16 AND 24 DECORATIVE STYLE"],["BA-MR8712D3GCH 12\" CHROME GRAB BAR",17.187],["BA-MLR8716D3GCH 16\" CHROME GRAB BAR",21.187],["BA-MLR8724D3GCH 24\" CHROME GRAB BAR",22.934],["BN GRAB BARS 12, 16, AND 24 DECORATIVE STYLE"],["BA-MR8712D3GBN 12\" BRUSHED NICKEL GRAB BAR",16.32],["BA-MR8716D3GBN 16\" BRUSHED NICKEL GRAB BAR",20.267],["BA-MR8724D3GBN 24\" BRUSHED NICKEL GRAB BAR",22.734],["MB GRAB BARS 12, 16 ANJD 24 DECORATIVE STYLE"],["BA-MR8712D3GMB 12\" MATTE BLACK GRAB BAR",18.934],["BA-MR8716D3GMB 16\" MATTE BLACK GRAB BAR",22.934],["BA-MR8724D3GMB 24\" MATTE BLACK GRAB BAR",26],["CHROME GRAB BARS 12, 16 AND 24 T STYLE"],["BA-MYG0712CH 12\" CHROME GRAB BAR",18.907],["BA-MYG0716CH 16\" CHROME GRAB BAR",23.307],["BA-MYG0724CH 24\" CHROME GRAB BAR",25.227],["BN GRAB BARS 12, 16 AND 24 T STYLE"],["BA-MYG0712BN 12\" BRUSHED NICKEL GRAB BAR",17.947],["BA-MYG0716BN 16\" BRUSHED NICKEL GRAB BAR",22.294],["BA-MYG0724BN 24\" BRUSHED NICKEL GRAB BAR",25.014],["MB GRAB BARS 12, 16 AND 24 T STYLE"],["BA-MYG0712MB 12\" MATTE BLACK GRAB BAR",20.827],["BA-MYG0716MB 16\" MATTE BLACK GRAB BAR",25.227],["BA-MYG0724MB 24\" MATTE BLACK GRAB BAR",28.6],["DRAIN COVERS"],["BA-JD4005BN SNAP-IN STRAINER BRUSHED NICKEL",5.546],["BA-JD4005C SNAP-IN STRAINER CHROME",5.655],["BA-JD4005MB SNAP-IN STRAINER MATTE BLACK",9.837]]},{"name":"Moen","labor":false,"markup":2.857,"rows":[["SHOWER/TUB SHOWER VALVE"],["MOEN 2326PF POSI-TEMP(R) 1/2\" PEX CONNECTION INCLUDES PRESSURE BALANCING AND STOPS",84.4],["MOEN 2360PF POSI-TEMP(R) 1/2\" PEX CONNECTION INCLUDES PRESSURE BALANCING WITH TUB SPOUT STUBOUT ELL",94.175],["ALIGN SHOWER TRIM"],["MOEN T2192 ALIGN POSI-TEMP SHOWER CHROME",100.463],["MOEN T2192BN ALIGN POSI TEMP BRUSHED NICKEL",157.238],["MOEN T2192BL SHOWER TRIM POSI-TEMP MATTE BLACK 2.5GPM HAF",157.238],["GYLDE SHOWER TRIM"],["MOEN T2742 GLYDE SHOWER TRIM KIT FOR POSI TEMP CHROME",49.15],["MOEN T2742BN GLYDE SHOWER FCT TRIM BRUSHED NICKEL",105.775],["MOEN T2742BL MATTE BLACK POSI-TEMP SHOWER TRIM ONLY",116.3],["DARTMOOR SHOWER TRIM"],["MOEN T2282EP DARTMOOR CHROME POSI TEMP SHOWER ONLY TRIM CHROME",76.5],["MOEN T2282EPBN BRUSHED NICKEL POSI-TEMP(R) SHOWER ONLY",131.9],["MOEN T2282EPBL MATTE BLACK POSI-TEMP(R) SHOWER ONLY",142.2],["ALIGN TUB/SHOWER TRIM"],["MOEN T2193 ALIGN TUB SHOWER TRIM CHROME",127.875],["MOEN T2193BN ALIGN TUB SHOWER TRIM BRUSHED NICKEL",197.875],["MOEN T2193BL ALIGN TUB SHOWER TRIM MATTE BLACK",197.875],["GLYDE TUB/SHOWER TRIM"],["MOEN T2743 GLYDE TUB/SHOWER TRIM CHROME",71.513],["MOEN T2743BN GLYDE TUB/SHOWER TRIM BRUSHED NICKEL",139.513],["MOEN T2743BL GLYDE IN MATT BLACK TUB/SHOWER TRIM",153.488],["DARTMOOR TUB/SHOWER TRIM"],["MOEN T2283EP CHROME POSI-TEMP(R) TUB/SHOWER",98.4],["MOEN T2283EPBN DARTMOOR T/S POSITEMP TRIM BRUSHED NICKEL",164.888],["MOEN T2283EPBL MATTE BLACK DARTMOOR POSI-TEMP TUB/SHOWER",178.575],["ENGAGE ECO PERFORMANCE MAGNETIC HANDHELD"],["MOEN 3662EP CHROME ECO-PERFORMANCE MAGNETIX HANDSHOWER",126.027],["MOEN 3662EPBN BRUSHED NICKEL ECO-PERFORMANCE MAGNETIX HANDSHOWER",170.867],["MOEN 3662EPBL MATTE BLACK MAGNETIX HAND HELD SHOWER KIT WITH HOSE AND HOLDER (IN PLACE OF SHOWER HEAD)",208.374],["MOEN MAGNETIX VERSO COMBINATION SHOWER WITH INFINISTE 7\" SPRAY HEAD"],["MOEN 220C5EP 1.75GPM HNDSHR",152.694],["MOEN 220C5EPBN 1.75GPM HNDSHR",198.52],["MOEN 220C5BL 2.5GPM HNDSHR",181.254],["REMOTE DOCK FOR HANDHELD"],["MOEN 186117 MAGNETIX CRADLE CHROME",16.129],["MOEN 186117BN MAGNETIX HANDHELD DOCK BRUSHED NICKEL",24.729],["MOEN 186117BL MATTE BLACK MAGNETIX DOCK",26.058],["SHOWER RODS"],["CSI 2-100-5SS COMMERCIAL 1\" X 5' .035 STAINLESS STEEL ROD STAINLESS",20.359],["CSI 63-F COMMERCIAL CHROME EXPOSED FLANGE CHROME (2 FLANGES)",3.129],["CSI 52-5-BN BRUSHED NICKEL FINISH STAINLESS STEEL SHOWER ROD WITH BRUSHED NICKEL ADJUSTABLE FLANGES",27.272],["BARCLAY 310-SN HEAVY ROUND DIE CAST FIXED FLANGE SATIN NICKEL",7.52],["BARCLAY 310-SN HEAVY ROUND DIE CAST FIXED FLANGE SATIN NICKEL",7.52],["8018-60-MB MATTE BLACK STRAIGHT ROD 60\" WITH FLANGES ( requires rod and brackets )",91.154],["8018-72-MB MATTE BLACK STRAIGHT ROD 72\" WITH FLANGES ( requires rod and bracket )",95.231],["CSI CSR2165CH 5' CURVED SHOWER ROD WITH PIVOTING FLANGES CHROME",34.3],["CSI CSR2165BN 5' CURVED SHOWER ROD WITH PIVOTING FLANGES BRUSHED NICKEL",36.729],["CSI CSR2167BL MATTE BLACK 5' CURVED SHOWER ROD",48.458],["ALIGN GRAB BARS"],["CSI YG0412CH CHROME 12\" DESIGNER GRAB BAR",57.334],["CSI YG0412BN BRUSHED NICKEL 12\" DESIGNER GRAB BAR",71.867],["CSI YG0412BL 12IN GRAB BAR",61.334],["CSI YG0418CH ALIGN CHROME 18\" GRAB BAR",61.334],["CSI YG0418BN BRUSHED NICKEL 18\" GRAB BAR",76.934],["CSI YG0418BL 18IN GRAB BAR",64.667],["CSI YG0424CH CHROME 24\" DESIGNER GRAB BAR",64.267],["CSI YG0424BN BRUSHED NICKEL 24\" DESIGNER GRAB BAR",80.334],["CSI YG0424BL 24\" ALIGN GRAB BAR",68],["CSI YG0436CH CHROME 36\" DESIGNER GRAB BAR",72.72],["CSI YG0436BN BRUSHED NICKEL 36\" DESIGNER GRAB BAR",91],["CSI YG0436BL ALIGN 36\" GRAB BAR",91.867],["ISO GRAB BARS"],["CSI YG0712CH ISO CHROME 12\" GRAB BAR",47.8],["CSI YG0718CH ISO 18\" GRAB BAR POLISHED CHROME",50.414],["CSI YG0724CH ISO CHROME 24\" ISO GRAB BAR",53],["CSI YG0712BN BRUSHED NICKEL 12\" ISO GRAB BAR",56.04],["CSI YG0718BN BRUSHED NICKEL 18\" ISO GRAB BAR",58.907],["CSI YG0724BN BRUSHED NICKEL 24\" ISO GRAB BAR",62],["CSI YG0712BL ISO 12\" MATTE BLACK GRAB BAR",60.054],["CSI YG0718BL ISO 18\" MATTE BLACK GRAB BAR",63.4],["CSI YG0724BL ISO MATTE BLACK 24\" GRAB BAR",66.68]]},{"name":"Monteray Walls","labor":false,"markup":2.857,"rows":[["60X36X96 MONTERAY WALLS"],["SAMUEL MUELLER SMMWK603696-21V MONTEREY VELVET WHITE SHOWER WALL KIT INCLUDES TWO 36 INCH SIDE WALLS ONE 60 INCH BACK WALL AND TWO INSIDE CORNER MOLDINGS 60\"W X 36\"D X 96\"H TRIMMABLE",1600.543],["SAMUEL MUELLER SMMWK603696-21 WHITE/TILE SHOWER WALLS 3PC KIT (INCLUDES 2 END WALLS 1 BACK WALL 2 INSIDE CORNER TRIM MOLDING PIECES 60\"X36\"X96\"",1600.543],["SAMUEL MUELLER SMMWK603696-47V MONTEREY VELVET CARRARA SHOWER WALL KIT INCLUDES TWO 36 INCH SIDE WALLS ONE 60 INCH BACK WALL AND TWO INSIDE CORNER MOLDINGS 60\"W X 36\"D X 96\"H TRIMMABLE",1919.991],["SAMUEL MUELLER SMMWK603696-47 CARRARA TILED SHOWER WALLS KIT (INCLUDES 2 END WALLS 1 BACK WALL 2 INSIDE CORNER TRIM MOLDING PIECES) 60\" X 36\" X 96\"",1919.991],["SAMUEL MUELLER SMMWK603696-48V MONTEREY VELVET BUTTERSCOTCH SHOWER WALL KIT INCLUDES TWO 36 INCH SIDE WALLS ONE 60 INCH BACK WALL AND TWO INSIDE CORNER MOLDINGS 60\"W X 36\"D X 96\"H TRIMMABLE",1919.991],["SAMUEL MUELLER SMMWK603696-48 MONTEREY BUTTERSCOTCH TILE PATTERN WALL KIT FITS UP TO 60X36X96 HIGH (INCLUDES 2 END WALLS 1 BACK WALL 2 INSIDE CORNER TRIM MOLDING PIECES",1919.991],["SAMUEL MUELLER SMMWK603696-50V MONTEREY VELVET MOONSTONE SHOWER WALL KIT INCLUDES TWO 36 INCH SIDE WALLS ONE 60 INCH BACK WALL AND TWO INSIDE CORNER MOLDINGS 60\"W X 36\"D X 96\"H TRIMMABLE",1919.991],["SAMUEL MUELLER SMMWK603696-50 MONTEREY SUBWAY TILED MOONSTONE SHOWER WALL KIT INCLUDES TWO 36 INCH SIDE WALLS ONE 60 INCH BACK WALL AND TWO INSIDE CORNER MOLDINGS 60\"W X 36\"D X 96\"H TRIMMABLE",1919.991],["STORAGE POD"],["SAMUEL MUELLER SMSSP1414-47 SOLID SURFACE RECESSED STORAGE POD CARRARA VELVET 14\"X14\"",141.687],["SAMUEL MUELLER SMSSP1414-48 SOLID SURFACE STORAGE POD BUTTERSCOTCH 14\"X14\"X3-3/4\"",141.687],["SAMUEL MUELLER SMSSP1414-21 SOLID SURFACE STORAGE POD WHITE 14\"X14\"",76.701],["SAMUEL MUELLER SMSSP1414-50 MOONSTONE SOLID SURFACE STORAGE POD 14X14X3.75",146.26],["SHELVES"],["SAMUEL MUELLER SMCS88PR-47 PAIR OF 8\" CORNER SHELVES IN CARRARA",157.59],["SAMUEL MUELLER SMCS88PR-48 8\" PAIR CORNER SHELVES SOLID SURFACE MONTEREY BUTTERSCOTCH 48",157.59],["SAMUEL MUELLER SMCS88PR-01 8\" CORNER SHELF PAIR WHITE SMCS88PR-21",157.59],["SAMUEL MUELLER SMCS88PR-50 MOONSTONE CORNER SHELVES (PAIR)",157.59],["SILICONE"],["LENTUS * 4045032 DOWSIL HVAC/R AND PLUMBING CLEAR 100% SILICONE SEALANT 10.3 OZ",5.225],["SAMUEL MUELLER 502WH-C24 T200-01 WHITE SILICONE ADHESIVE",10.951],["SAMUEL MUELLER 502CAM-C24 CAMEO/ALMOND SILICONE ADHESIVE",10.951],["SAMUEL MUELLER 502GRY-C24 T200-39 100% SILICONE ADHESIVE GREY 1 10OZ TUBE",10.951]]},{"name":"Shower Bases","labor":false,"markup":2.857,"rows":[["32\" WIDE - WHITE (CENTER, RIGHT AND LEFT SAME PRICE)"],["REV CDSB-32X32-W-0660 ACRYLIC SHOWER BASE 32 X 32 WHITE WITH CENTER DRAIN",294.667],["34\" WIDE - WHITE (CENTER, RIGHT AND LEFT SAME PRICE)"],["REV CDSB-34X32-W-0660 ACRYLIC SHOWER BASE 34 X 32 WHITE WITH CENTER DRAIN",309.334],["REV CDSB-34X34-W-0660 ACRYLIC SHOWER BASE 34 X 34 WHITE WITH CENTER DRAIN",324],["36\" WIDE - WHITE (CENTER, RIGHT AND LEFT SAME PRICE)"],["REV CDSB-36X34-W-0660 ACRYLIC SHOWER BASE 36 X 34 WHITE WITH CENTER DRAIN",338.667],["REV CDSB-36X36-W-0660 ACRYLIC SHOWER BASE 36 X 36 WHITE WITH CENTER DRAIN",354.667],["42\" WIDE - WHITE (CENTER, RIGHT AND LEFT SAME PRICE)"],["REV CDSB-42X32-W-0660 ACRYLIC SHOWER BASE 42 X 32 WHITE WITH CENTER DRAIN",365.334],["REV CDSB-42X34-W-0660 ACRYLIC SHOWER BASE 42 X 34 WHITE WITH CENTER DRAIN",384],["REV CDSB-42X36-W-0660 ACRYLIC SHOWER BASE 42 X 36 WHITE WITH CENTER DRAIN",536],["REV CDSB-42X42-W-0660 ACRYLIC SHOWER BASE 42 X 42 WHITE WITH CENTER DRAIN",525.334],["48\" WIDE - WHITE (CENTER, RIGHT AND LEFT SAME PRICE)"],["REV CDSB-48X32-W-0660 ACRYLIC SHOWER BASE 48 X 32 WHITE WITH CENTER DRAIN",408],["REV CDSB-48X34-W-0660 ACRYLIC SHOWER BASE 48 X 34 WHITE WITH CENTER DRAIN",429.334],["REV CDSB-48X36-W-0660 ACRYLIC SHOWER BASE 48 X 36 WHITE WITH CENTER DRAIN",450.667],["REV CDSB-48X48-W-0660 ACRYLIC SHOWER BASE 48 X 48 WHITE WITH CENTER DRAIN",645.334],["54\" WIDE - WHITE (CENTER, RIGHT AND LEFT SAME PRICE)"],["REV CDSB-54X36-W-0660 ACRYLIC SHOWER BASE 54 X 36 WHITE WITH CENTER DRAIN",498.667],["REV CDSB-54X42-W-0660 ACRYLIC SHOWER BASE 54 X 42 WHITE WITH CENTER DRAIN",637.334],["REV CDSB-54X48-W-0660 ACRYLIC SHOWER BASE 54 X 48 WHITE WITH CENTER DRAIN",709.334],["REV CDSB-54X54-W-0660 ACRYLIC SHOWER BASE 54 X 54 WHITE WITH CENTER DRAIN",781.334],["60\" WIDE - WHITE (CENTER, RIGHT AND LEFT SAME PRICE)"],["REV LHSB-60X30-W-0660 ACRYLIC SHOWER BASE 60 X 30 WHITE WITH LEFT HAND DRAIN",466.667],["REV RHSB-60X30-W-0660 ACRYLIC SHOWER BASE 60 X 30 WHITE WITH RIGHT HAND DRAIN",466.667],["REV LHSB-60X32-W-0660 ACRYLIC SHOWER BASE 60 X 32 WHITE WITH LEFT HAND DRAIN",493.334],["REV RHSB-60X32-W-0660 ACRYLIC SHOWER BASE 60 X 32 WHITE WITH RIGHT HAND DRAIN",493.334],["REV LHSB-60X34-W-0660 ACRYLIC SHOWER BASE 60 X 34 WHITE WITH LEFT HAND DRAIN",520],["REV RHSB-60X34-W-0660 ACRYLIC SHOWER BASE 60 X 34 WHITE WITH RIGHT HAND DRAIN",520],["REV CDSB-60X34-W-0660 ACRYLIC SHOWER BASE 60 X 34 WHITE WITH CENTER DRAIN",520],["REV LHSB-60X36-W-0660 ACRYLIC SHOWER BASE 60 X 36 WHITE WITH LEFT HAND DRAIN",546.667],["REV RHSB-60X36-W-0660 ACRYLIC SHOWER BASE 60 X 36 WHITE WITH RIGHT HAND DRAIN",546.667],["REV CDSB-60X36-W-0660 ACRYLIC SHOWER BASE 60 X 36 WHITE WITH CENTER DRAIN",546.667],["REV LHSB-60X42-W-0660 ACRYLIC SHOWER BASE 60 X 42 WHITE WITH LEFT HAND DRAIN",693.334],["REV RHSB-60X42-W-0660 ACRYLIC SHOWER BASE 60 X 42 WHITE WITH RIGHT HAND DRAIN",693.334],["REV CDSB-60X42-W-0660 ACRYLIC SHOWER BASE 60 X 42 WHITE WITH CENTER DRAIN",693.334],["REV CDSB-60X48-W-0660 ACRYLIC SHOWER BASE 60 X 48 WITH CENTER DRAIN",933.334],["REV RHSB-60X48-W-0660 ACRYLIC SHOWER BASE 60 X 48 WITH RIGHT HAND DRAIN",933.334],["REV LHSB-60X48-W-0660 ACRYLIC SHOWER BASE 60 X 48 WITH LEFT HAND DRAIN",933.334],["72\" WIDE - WHITE (CENTER, RIGHT AND LEFT SAME PRICE)"],["REV LHSB-72X32-W-0660 ACRYLIC SHOWER BASE 72 X 32 WHITE WITH LEFT HAND DRAIN",773.334],["REV RHSB-72X32-W-0660 ACRYLIC SHOWER BASE 72 X 32 WHITE WITH RIGHT HAND DRAIN",773.334],["REV CDSB-72X32-W-0660 ACRYLIC SHOWER BASE 72 X 32 WHITE WITH CENTER DRAIN",773.334],["REV CDSB-72X42-W-0660 ACRYLIC SHOWER BASE 72 X 42 WHITE WITH CENTER DRAIN",805.334],["REV CDSB-72X48-W-0660 ACRYLIC SHOWER BASE 72 X 48 WHITE WITH CENTER DRAIN",901.334],["76\" WIDE - WHITE (CENTER, RIGHT AND LEFT SAME PRICE)"],["REV CDSB-76X36-W-0660 ACRYLIC SHOWER BASE 76 X 36 WHITE WITH CENTER DRAIN",709.334],["30 X 60 WHITE CUP BASE"],["PS-3060L-W 60X30 ACRYLIC SHOWER CUPPED BASE WITH LEFT HAND DRAIN",232.884],["PS-3060R-W 60X30 ACRYLIC SHOWER CUPPED BASE WITH RIGHT HAND DRAIN",232.875],["32 X 60 WHITE CUP BASE"],["PS-3260L-W 60X32 ACRYLIC SHOWER CUPPED BASE WITH LEFT HAND DRAIN",243],["PS-3260R-W 60X32 ACRYLIC SHOWER CUPPED BASE WITH RIGHT HAND DRAIN",243]]},{"name":"Tubs","labor":false,"markup":2.857,"rows":[["60X32 RIGHT AND LEFT"],["STERLING 71121110-0 ENSEMBLE LH WHITE TUB ONLY 7122LTW RI 60X32X18",320.402],["STERLING 71121120-0 ENSEMBLE RH WHITE TUB ONLY 7122RTW 60X32X18",320.763],["OASIS BA-R-51R RH WHITE TUB ONLY 60 X 32 X 17-1/4",392.519],["OASIS BA-R-51L LH WHITE TUB ONLY 60 X 32 X 17-1/4",392.519],["MAAX 106883-000-002-100 JAXI 60X32 ACRYlX ALCOVE LEFT HAND DRAIN TUB WHITE",556.938],["MAAX 106883-000-002-101 JAXI 60X32 ACRYlX ALCOVE RIGHT HAND DRAIN TUB WHITE",556.938],["60X30 RIGHT AND LEFT"],["STERLING 71171110-0 WHITE 30\" ENSEMBLE MEDLEY LEFT HAND TUB",251.708],["STERLING 71171120-0 WHITE 30\" ENSEMBLE MEDLEY RIGHT HAND TUB",253.185],["OASIS BA-R-41R WHITE TUB ONLY RH DRAIN 60\"x30\"x17-1/4\"",218],["OASIS BA-R-41L WHITE TUB ONLY LH DRAIN 60\"x30\"x17-1/4\"",241.8],["MAAX 106882-000-002-101 JAXI 6030 RIGHT HAND SOAKING TUB WHITE 60\"LX31-1/2W\"X17-1/2\"D",464.907],["MAAX 106882-000-002-100 JAXI 6030 LEFT HAND SOAKING TUB WHITE 60\"LX31-1/2W\"X17-1/2\"D",464.9],["MADISON ACRYLIC STOCKED TUBS 15\" HIGH"],["REV RHTUB-60X30X15-W-0660 WHITE ACRYLIC TUB WITH RIGHT HAND DRAIN AND SPRAY FOAM",466.667],["REV LHTUB-60X30X15-W-0660 WHITE ACRYLIC TUB WITH LEFT HAND DRAIN AND SPRAY FOAM",466.667],["REV RHTUB-60X32X15-W-0660 WHITE ACRYLIC TUB WITH RIGHT HAND DRAIN AND SPRAY FOAM",466.667],["REV LHTUB-60X32X15-W-0660 WHITE ACRYLIC TUB WITH LEFT HAND DRAIN AND SPRAY FOAM",466.667],["MADISON ACRYLIC STOCKED TUBS 17\" HIGH"],["REV RHTUB-60X30X17-W-0660 WHITE ACRYLIC TUB WITH RIGHT HAND DRAIN AND SPRAY FOAM",480],["REV LHTUB-60X30X17-W-0660 WHITE ACRYLIC TUB WITH LEFT HAND DRAIN AND SPRAY FOAM",480],["REV RHTUB-60X32X17-W-0660 WHITE ACRYLIC TUB WITH RIGHT HAND DRAIN AND SPRAY FOAM",480],["REV LHTUB-60X32X17-W-0660 WHITE ACRYLIC TUB WITH LEFT HAND DRAIN AND SPRAY FOAM",480],["MADISON ACRYLIC STOCKED TUBS 19\" HIGH"],["REV RHTUB-AR-60X36X19-W-0660 WHITE ACRYLIC TUB WITH RIGHT HAND DRAIN SPRAY FOAM AND ARM REST",586.667],["REV LHTUB-AR-60X36X19-W-0660 WHITE ACRYLIC TUB WITH LEFT HAND DRAIN SPRAY FOAM AND ARM RESTWE",586.667]]},{"name":"Drains and Waste Overflows","labor":false,"markup":2.857,"rows":[["SHOWER DRAIN"],["SIOUX CHIEF 825-2P SHOWER DRAIN 2\" PVC STANDARD",5.313],["PASCO 7980 BRASS NC SHOWER DRAIN SS STR 2\" NO CAULK",21.546],["*SHOWER DRAIN WITH 1-1/2\" SIDE OUTLET *Non-Stock Item-Freight Chrgs Apply",42.25],["SHOWER DRAIN WITH 2\" SIDE OUTLET *Non-Stock Item-Freight Chrgs Apply",45.834],["SIOUX CHIEF 825-2PFS SHOWER DRAIN PVC 2\" OFFSET",11.551],["WASTE OVERFLOW"],["WATCO 924 CP PUSH PULL WASTE AND OVERFLOW FLEX TUBING CHROME PLATED",49.157],["WATCO 924 BN PUSH PULL WASTE AND OVERFLOW TUBING BRUSHED NICKEL",66.595],["WATCO 924 WI PUSH PULL WASTE AND OVERFLOW TUBING MATTE BLACK PLATED",66.907]]},{"name":"Trimslate Bases","labor":false,"markup":2.857,"rows":[["WHITE CENTER DRAIN TRIMSLATE SHOWER BASES"],["SAMUEL MUELLER SMFZSE4836C-31 WHITE CENTER DRAIN 47.2\"X35.5\"X17.75\" TRIMSLATE ELITE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED STAINLESS STEEL DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",474.322],["SAMUEL MUELLER SMFZS5140C-31 WHITE CENTER DRAIN 51.2\"X39.4\"X19.7\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED COLOR MATCHED SMC DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",562.751],["SAMUEL MUELLER SMFZS6032C-31 WHITE CENTER DRAIN 59.1\"X31.5\"X15.75\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED STAINLESS STEEL DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",538.525],["SAMUEL MUELLER SMFZSE6036C-31 WHITE CENTER DRAIN 59.1\"X35.5\"X17.75\" TRIMSLATE ELITE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED STAINLESS STEEL DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",592.237],["SAMUEL MUELLER SMFZS6040C-31 WHITE CENTER DRAIN 59.1\"X39.4\"X19.7\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED COLOR MATCHED SMC DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",681.984],["SAMUEL MUELLER SMFZSE6042C-31 WHITE CENTER DRAIN 59.1\"X41.5\"X20.75\" TRIMSLATE ELITE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED STAINLESS STEEL DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",695.1],["SAMUEL MUELLER SMFZS6048C-31 WHITE CENTER DRAIN 59.1\"X47.5\"X23.75\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED STAINLESS STEEL DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",795.325],["SAMUEL MUELLER SMFZS6332C-31 WHITE CENTER DRAIN 63\"X31.5\"X15.75\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED STAINLESS STEEL DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",567.998],["SAMUEL MUELLER SMFZS6336C-31 WHITE CENTER DRAIN 63\"X35.5\"X17.75\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED STAINLESS STEEL DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",641.375],["SAMUEL MUELLER SMFZS6340C-31 WHITE CENTER DRAIN 63\"X39.4\"X19.7\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED COLOR MATCHED SMC DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",722.607],["SAMUEL MUELLER SMFZS6642C-31 WHITE CENTER DRAIN 64.9\"X41.5\"X20.75\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED STAINLESS STEEL DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",764.535],["SAMUEL MUELLER SMFZS6648C-31 WHITE CENTER DRAIN 64.9\"X47.5\"X23.75\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED STAINLESS STEEL DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",874.594],["SAMUEL MUELLER SMFZS6736C-31 WHITE CENTER DRAIN 67\"X35.5\"X17.75\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED STAINLESS STEEL DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",691.817],["SAMUEL MUELLER SMFZS7236C-31 WHITE CENTER DRAIN 70.9\"X35.5\"X17.75\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED STAINLESS STEEL DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",742.918],["SAMUEL MUELLER SMFZS7242C-31 WHITE CENTER DRAIN 70.9\"X41.5\"X20.75\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED STAINLESS STEEL DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",834.63],["SAMUEL MUELLER SMFZSE7248C-31 WHITE CENTER DRAIN 70.9\"X47.5\"X23.75\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED STAINLESS STEEL DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",953.862],["SAMUEL MUELLER SMFZS7940C-31 WHITE CENTER DRAIN 78.7\"X39.4\"X19.7\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED COLOR MATCHED SMC DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",803.181],["WHITE END DRAIN TRIMSLATE SHOWER BASES"],["SAMUEL MUELLER SMFZSE6032-31 WHITE TUB REPLACEMENT END DRAIN (LH/RH) 59.1\"X31.5\"X15.75\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED COLOR MATCHED SMC DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",538.525],["SAMUEL MUELLER SMFZSR6036-31 WHITE TUB REPLACEMENT END DRAIN (LH/RH) 59.1\"X35.5\"X17.75\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED COLOR MATCHED SMC DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",592.237],["SAMUEL MUELLER SMFZSR6332-31 WHITE END DRAIN (LH/RH) 63\"X31.5\"X15.75\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED COLOR MATCHED SMC DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",567.998],["SAMUEL MUELLER SMFZSR6336-31 WHITE TUB REPLACEMENT END DRAIN (LH/RH) 63\"X35.5\"X17.75\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED COLOR MATCHED SMC DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",641.375],["SAMUEL MUELLER SMFZS7236-31 WHITE END DRAIN (LH/RH) 70.9\"X35.5\"X17.75\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED COLOR MATCHED SMC DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",742.918],["CAMEO CENTER DRAIN TRIMSLATE SHOWER BASES"],["SAMUEL MUELLER SMFZSE4836C-32 CAMEO CENTER DRAIN 47.2\"X35.5\"X17.75\" TRIMSLATE ELITE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED STAINLESS STEEL DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",474.322],["SAMUEL MUELLER SMFZS5140C-32 CAMEO CENTER DRAIN 51.2\"X39.4\"X19.7\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED COLOR MATCHED SMC DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",562.751],["SAMUEL MUELLER SMFZS6032C-32 CAMEO CENTER DRAIN 59.1\"X31.5\"X15.75\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED STAINLESS STEEL DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",538.525],["SAMUEL MUELLER SMFZSE6036C-32 CAMEO CENTER DRAIN 59.1\"X35.5\"X17.75\" TRIMSLATE ELITE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED STAINLESS STEEL DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",592.237],["SAMUEL MUELLER SMFZS6040C-32 CAMEO CENTER DRAIN 59.1\"X39.4\"X19.7\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED COLOR MATCHED SMC DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",681.984],["SAMUEL MUELLER SMFZSE6042C-32 CAMEO CENTER DRAIN 59.1\"X41.5\"X20.75\" TRIMSLATE ELITE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED STAINLESS STEEL DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",695.1],["SAMUEL MUELLER SMFZS6048C-32 CAMEO CENTER DRAIN 59.1\"X47.5\"X23.75\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED STAINLESS STEEL DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",795.325],["SAMUEL MUELLER SMFZS6332C-32 CAMEO CENTER DRAIN 63\"X31.5\"X15.75\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED STAINLESS STEEL DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",567.998],["SAMUEL MUELLER SMFZS6336C-32 CAMEO CENTER DRAIN 63\"X35.5\"X17.75\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED STAINLESS STEEL DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",641.375],["SAMUEL MUELLER SMFZS6340C-32 CAMEO CENTER DRAIN 63\"X39.4\"X19.7\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED COLOR MATCHED SMC DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",722.607],["SAMUEL MUELLER SMFZS6642C-32 CAMEO CENTER DRAIN 64.9\"X41.5\"X20.75\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED STAINLESS STEEL DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",764.535],["SAMUEL MUELLER SMFZS6648C-32 CAMEO CENTER DRAIN 64.9\"X47.5\"X23.75\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED STAINLESS STEEL DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",874.594],["SAMUEL MUELLER SMFZS6736C-32 CAMEO CENTER DRAIN 67\"X35.5\"X17.75\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED STAINLESS STEEL DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",691.817],["SAMUEL MUELLER SMFZS7236C-32 CAMEO CENTER DRAIN 70.9\"X35.5\"X17.75\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED STAINLESS STEEL DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",742.918],["SAMUEL MUELLER SMFZS7242C-32 CAMEO CENTER DRAIN 70.9\"X41.5\"X20.75\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED STAINLESS STEEL DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",834.63],["SAMUEL MUELLER SMFZSE7248C-32 CAMEO CENTER DRAIN 70.9\"X47.5\"X23.75\" TRIMSLATE ELITE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED STAINLESS STEEL DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",953.862],["SAMUEL MUELLER SMFZS7940C-32 CAMEO CENTER DRAIN 78.7\"X39.4\"X19.7\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED COLOR MATCHED SMC DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",803.181],["CAMEO END DRAIN TRIMSLATE SHOWER BASES"],["SAMUEL MUELLER SMFZSE6032-32 CAMEO TUB REPLACEMENT END DRAIN (LH/RH) 59.1\"X31.5\"X15.75\" TRIMSLATE ELITE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED COLOR MATCHED SMC DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",538.525],["SAMUEL MUELLER SMFZSE6036-32 CAMEO TUB REPLACEMENT END DRAIN (LH/RH) 59.1\"X35.5\"X17.75\" TRIMSLATE ELITE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED COLOR MATCHED SMC DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",592.237],["SAMUEL MUELLER SMFZSR6332-32 CAMEO TUB REPLACEMENT END DRAIN (LH/RH) 63\"X31.5\"X15.75\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED COLOR MATCHED SMC DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",567.998],["SAMUEL MUELLER SMFZSR6336-32 CAMEO TUB REPLACEMENT END DRAIN (LH/RH) 63\"X35.5\"X17.75\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED COLOR MATCHED SMC DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",641.375],["SAMUEL MUELLER SMFZS7236-32 CAMEO END DRAIN (LH/RH) 70.9\"X35.5\"X17.75\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED COLOR MATCHED SMC DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",742.918],["DARK GREY CENTER DRAIN TRIMSLATE SHOWER BASES"],["SAMUEL MUELLER SMFZS4836C-40 DARK GREY CENTER DRAIN 47.2\"X35.5\"X17.75\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED STAINLESS STEEL DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",474.322],["SAMUEL MUELLER SMFZS5140C-40 DARK GREY CENTER DRAIN 51.2\"X39.4\"X19.7\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED COLOR MATCHED SMC DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",562.751],["SAMUEL MUELLER SMFZS6032C-40 DARK GREY CENTER DRAIN 59.1\"X31.5\"X15.75\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED STAINLESS STEEL DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",538.525],["SAMUEL MUELLER SMFZS6036C-40 DARK GREY CENTER DRAIN 59.1\"X35.5\"X17.75\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED STAINLESS STEEL DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",592.237],["SAMUEL MUELLER SMFZS6040C-40 DARK GREY CENTER DRAIN 59.1\"X39.4\"X19.7\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED COLOR MATCHED SMC DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",681.984],["SAMUEL MUELLER SMFZS6042C-40 DARK GREY CENTER DRAIN 59.1\"X41.5\"X20.75\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED STAINLESS STEEL DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",695.1],["SAMUEL MUELLER SMFZS6048C-40 DARK GREY CENTER DRAIN 59.1\"X47.5\"X23.75\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED STAINLESS STEEL DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",795.325],["SAMUEL MUELLER SMFZS6332C-40 DARK GREY CENTER DRAIN 63\"X31.5\"X15.75\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED STAINLESS STEEL DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",567.998],["SAMUEL MUELLER SMFZS6336C-40 DARK GREY CENTER DRAIN 63\"X35.5\"X17.75\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED STAINLESS STEEL DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",641.375],["SAMUEL MUELLER SMFZS6340C-40 DARK GREY CENTER DRAIN 63\"X39.4\"X19.7\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED COLOR MATCHED SMC DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",722.607],["SAMUEL MUELLER SMFZS6642C-40 DARK GREY CENTER DRAIN 64.9\"X41.5\"X20.75\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED STAINLESS STEEL DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",764.535],["SAMUEL MUELLER SMFZS6648C-40 DARK GREY CENTER DRAIN 64.9\"X47.5\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED STAINLESS STEEL DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",874.594],["SAMUEL MUELLER SMFZS6736C-40 DARK GREY CENTER DRAIN 67\"X35.5\"X17.75\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED STAINLESS STEEL DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",691.817],["SAMUEL MUELLER SMFZS7236C-40 DARK GREY CENTER DRAIN 70.9\"X35.5\"X17.75\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED STAINLESS STEEL DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",742.918],["SAMUEL MUELLER SMFZS7242C-40 DARK GREY CENTER DRAIN 70.9\"X41.5\"X20.75\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED STAINLESS STEEL DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",834.63],["SAMUEL MUELLER SMFZS7248C-40 DARK GREY CENTER DRAIN 59.1\"X31.5\"X15.75\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED STAINLESS STEEL DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",953.862],["SAMUEL MUELLER SMFZS7940C-40 DARK GREY CENTER DRAIN 78.7\"X39.4\"X19.7\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED COLOR MATCHED SMC DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",803.181],["DARK GREY END DRAIN TRIMSLATE SHOWER BASES"],["SAMUEL MUELLER SMFZSE6032-40 DARK GREY TUB REPLACEMENT END DRAIN (LH/RH) 59.1\"X31.5\"X15.75\" TRIMSLATE ELITE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED COLOR MATCHED SMC DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",538.525],["SAMUEL MUELLER SMFZSE6036-40 DARK GREY TUB REPLACEMENT END DRAIN (LH/RH) 59.1\"X35.5\"X17.75\" TRIMSLATE ELITE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED COLOR MATCHED SMC DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",592.237],["SAMUEL MUELLER SMFZSR6332-40 DARK GREY TUB REPLACEMENT END DRAIN (LH/RH) 63\"X31.5\"X15.75\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED COLOR MATCHED SMC DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",567.998],["SAMUEL MUELLER SMFZSR6336-40 DARK GREY TUB REPLACEMENT END DRAIN (LH/RH) 63\"X35.5\"X17.75\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED COLOR MATCHED SMC DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",641.375],["SAMUEL MUELLER SMFZS7236-40 DARK GREY END DRAIN (LH/RH) 70.9\"X35.5\"X17.75\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED COLOR MATCHED SMC DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",742.918],["BLACK CENTER DRAIN TRIMSLATE SHOWER BASES"],["SAMUEL MUELLER SMFZS4836C-09 BLACK CENTER DRAIN 47.2\"X35.5\"X17.75\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED STAINLESS STEEL DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",474.322],["SAMUEL MUELLER SMFZS5140C-09 BLACK CENTER DRAIN 51.2\"X39.4\"X19.7\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED COLOR MATCHED SMC DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",562.751],["SAMUEL MUELLER SMFZS6032C-09 BLACK CENTER DRAIN 59.1\"X31.5\"X15.75\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED STAINLESS STEEL DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",538.525],["SAMUEL MUELLER SMFZS6036C-09 BLACK CENTER DRAIN 59.1\"X35.5\"X17.75\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED STAINLESS STEEL DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",592.237],["SAMUEL MUELLER SMFZS6040C-09 BLACK CENTER DRAIN 59.1\"X39.4\"X19.7\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED COLOR MATCHED DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",681.984],["SAMUEL MUELLER SMFZS6042C-09 BLACK CENTER DRAIN 59.1\"X41.5\"X20.75\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED STAINLESS STEEL DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",695.1],["SAMUEL MUELLER SMFZS6048C-09 BLACK CENTER DRAIN 59.1\"X47.5\"X23.75\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED STAINLESS STEEL DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",795.325],["SAMUEL MUELLER SMFZS6332C-09 BLACK CENTER DRAIN 63\"X31.5\"X15.75\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED STAINLESS STEEL DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",567.998],["SAMUEL MUELLER SMFZS6336C-09 BLACK CENTER DRAIN 63\"X35.5\"X17.75\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED STAINLESS STEEL DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",641.375],["SAMUEL MUELLER SMFZS6340C-09 BLACK CENTER DRAIN 63\"X39.4\"X19.7\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED COLOR MATCHED SMC DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",722.607],["SAMUEL MUELLER SMFZS6642C-09 BLACK CENTER DRAIN 64.9\"X41.5\"X20.75\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED STAINLESS STEEL DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",764.535],["SAMUEL MUELLER SMFZS6648C-09 BLACK CENTER DRAIN 64.9\"X47.5\"X23.75\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED STAINLESS STEEL DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",874.594],["SAMUEL MUELLER SMFZS6736C-09 BLACK CENTER DRAIN 67\"X35.5\"X17.75\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED STAINLESS STEEL DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",691.817],["SAMUEL MUELLER SMFZS7236C-09 BLACK CENTER DRAIN 70.9\"X35.5\"X17.75\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED STAINLESS STEEL DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",742.918],["SAMUEL MUELLER SMFZS7242C-09 BLACK CENTER DRAIN 70.9\"X41.5\"X20.75\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED STAINLESS STEEL DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",834.63],["SAMUEL MUELLER SMFZS7248C-09 BLACK CENTER DRAIN 70.9\"X47.5\"X23.75\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED STAINLESS STEEL DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",953.862],["SAMUEL MUELLER SMFZS7940C-09 BLACK CENTER DRAIN 78.7\"X39.4\"X19.7\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED COLOR MATCHED SMC DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",803.181],["BLACK END DRAIN TRIMSLATE SHOWER BASES"],["SAMUEL MUELLER SMFZSR6032-09 BLACK TUB REPLACEMENT END DRAIN (LH/RH) 59.1\"X31.5\"X15.75\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED COLOR MATCHED SMC DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",538.525],["SAMUEL MUELLER SMFZSR6036-09 BLACK TUB REPLACEMENT END DRAIN (LH/RH) 59.1\"X35.5\"X17.75\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED COLOR MATCHED SMC DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",592.237],["SAMUEL MUELLER SMFZSR6332-09 BLACK TUB REPLACEMENT END DRAIN (LH/RH) 63\"X31.5\"X15.75\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED COLOR MATCHED SMC DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",567.998],["SAMUEL MUELLER SMFZSR6336-09 BLACK TUB REPLACEMENT END DRAIN (LH/RH) 63\"X35.5\"X17.75\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED COLOR MATCHED SMC DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",641.375],["SAMUEL MUELLER SMFZS7236-09 BLACK END DRAIN (LH/RH) 70.9\"X35.5\"X17.75\" TRIMSLATE SMC ZERO THRESHOLD SHOWER BASE. INCLUDED COLOR MATCHED SMC DRAIN COVER. INCLUDES THREE 1\" HIGH ALUMINUM TILING FLANGES. THIS BASE IS TRIMMABLE.",742.918],["60\"THRESHOLD"],["SAMUEL MUELLER SMT60-31 WHITE 60\"X2.75\" TRIMMABLE THRESHOLD FOR TRIMSLATE ZERO THRESHOLD SHOWER BASES.",200.466],["SAMUEL MUELLER SMT60-32 CAMEO 60\"X2.75\" TRIMMABLE THRESHOLD FOR TRIMSLATE ZERO THRESHOLD SHOWER BASES.",200.466],["SAMUEL MUELLER SMT60-40 DARK GREY 60\"X2.75\" TRIMMABLE THRESHOLD FOR TRIMSLATE ZERO THRESHOLD SHOWER BASES.",200.466],["SAMUEL MUELLER SMT60-09 BLACK 60\"X2.75\" TRIMMABLE THRESHOLD FOR TRIMSLATE ZERO THRESHOLD SHOWER BASES.",200.466],["80\" THRESHOLD"],["SAMUEL MUELLER SMT80-31 WHITE 80\"X2.75\" TRIMMABLE THRESHOLD FOR TRIMSLATE ZERO THRESHOLD SHOWER BASES.",251.582],["SAMUEL MUELLER SMT80-32 CAMEO 80\"X2.75\" TRIMMABLE THRESHOLD FOR TRIMSLATE ZERO THRESHOLD SHOWER BASES.",251.582],["SAMUEL MUELLER SMT80-40 DARK GREY 80\"X2.75\" TRIMMABLE THRESHOLD FOR TRIMSLATE ZERO THRESHOLD SHOWER BASES.",251.582],["SAMUEL MUELLER SMT80-09 BLACK 80\"X2.75\" TRIMMABLE THRESHOLD FOR TRIMSLATE ZERO THRESHOLD SHOWER BASES.",251.582]]},{"name":"Shower Doors","labor":false,"markup":2.857,"rows":[["KOHLER LEVITY 5/16\" GLASS 48\" SHOWER"],["KOHLER 702422-L-SHP SHOWER DOOR 5/16\" SHOWER DOOR SILVER W/ TOWEL BAR HANDLES AND CLEAR GLASS 44-5/8\" TO 47-5/8\" OPENINGS 77-9/16\" TOTAL HEIGHT 71-9/16\" OPENING HEIGHT",580],["KOHLER 702422-L-BNK SHOWER DOOR 5/16\" SHOWER DOOR BRUSHED NICKEL W/TOWEL BAR HANDLES AND CLEAR GLASS 44-5/8\" TO 47-5/8\" OPENINGS 77-9/16\" TOTAL HEIGHT 71-9/16\" OPENING HEIGHT",580],["KOHLER 702422-L-BL SHOWER DOOR 5/16\" SHOWER DOOR MATTE BLACK W/ TOWEL BAR HANDLES AND CLEAR GLASS 44-5/8\" TO 47-5/8\" OPENINGS 77-9/16\" TOTAL HEIGHT 71-9/16\" OPENING HEIGHT - FRAMELESS",658.667],["STERLING FINESSE 60\" SHOWER"],["STERLING 5475-59S-G05 FINESSE FRAMELESS BYPASS SHOWER DOOR CLEAR GLASS SILVER FRAME 54-5/8\"-59-5/8\" W x 69-3/4\" H",312],["STERLING 5475-59N-G05 FINESSE FRMLS BYPASS DOOR CLEAR GLASS/BRUSHED NICKEL FRAME 54-5/8\"-59-5/8\" W x 69-3/4\" H",325.334],["STERLING 5475-59PBL-G05 FINESSE FRMLS BYPASS DOOR MATTE BLACK 54-5/8\"-59-5/8\" W x 69-3/4\" H",368],["STERLING FINESSE 48\" SHOWER"],["STERLING 5475-48S-G05 FINESSE FRAMELESS BYPASS DOOR 42-5/8\" - 47-5/8\"W X 70-1/16\"H CLEAR GLASS SILVER FRAME",297.334],["STERLING 5475-48N-G05 FINESSE FRAMELESS BYPASS DOOR BRUSHED NICKEL CLEAR GLASS 42-5/8 - 47-5/8\" W x 69-3/4\" H",312],["STERLING 5475-48PBL-G05 FINESSE FRMLS BYPASS DOOR MATTE BLACK FRAME CLEAR GLASS 42-5/8 - 47-5/8\" W x 69-3/4\" H",354.667],["KOHLER LEVITY 5/16\" GLASS 60\" TUB DOOR"],["KOHLER 702420-L-SHP BATH DOOR LEVITY PLUS BRIGHT POLISHED SILVER 61-9/16\" H x 56-5/8 - 59-5/8\" W WITH 5/16\"-THICK CRYSTAL CLEAR GLASS",568],["KOHLER 702420-L-BNK BATH DOOR LEVITY PLUS ANODIZED BRUSHED NICKEL 61-9/16\" H x 56-5/8 - 59-5/8\" W WITH 5/16\"-THICK CRYSTAL CLEAR GLASS",580],["KOHLER 702420-L-BL BATH DOOR LEVITY PLUS MATTE BLACK 61-9/16\" H x 56-5/8 - 59-5/8\" W WITH 5/16\"-THICK CRYSTAL CLEAR GLASS",658.667],["STERLING FINESSE 60\" TUB DOOR"],["STERLING 5425-59S-G05 FINESSE FRAMELESS BYPASS BATH DOOR CLEAR GLASS SILVER TRIM 54-5/8\"-59-5/8\"W x 55-3/16\"H",284],["STERLING 5425-59N-G05 FINESSE FRMLS BYPASS DOOR CLEAR BRUSHED NICKEL 54-5/8\"-59-5/8\" W x 55-3/16\" H",297.334],["STERLING 5425-59PBL-G05 FINESSE FRMLS BYPASS DOOR MATTE BLACK 54-5/8\"-59-5/8\" W x 55-3/16\" H",340],["KOHLER LEVITY 1/4\" GLASS 60\" SHOWER"],["KOHLER 706015-L-SH LEVITY 74\"H X 56-5/8-59-5/8\"W (HEADER HEIGHT 70\"H) 1/4\" SHOWER DOOR W/CURVED TOWEL BAR CRYSTAL CLEAR GLASS WITH SILVER FRAME",533.334],["KOHLER 706015-L-MX LEVITY SEMI-FRAMELESS SHOWER DOOR W/TOWEL BAR 56\"-5/8\"- 59-5/8\"W X 74\"H CRYSTAL CLEAR 1/4\" GLASS WITH MATTE NICKEL HEADER HEIGHT 70\"",574.667],["KOHLER 706015-L-BL LEVITY SHOWER DOOR MATTE BLACK W/TOWEL BAR HANDLES AND 1/4\" CLEAR GLASS 56-5/8\" TO 59-5/8\" OPENINGS 74\" TOTAL HEIGHT 70\" HEADER HEIGHT",614.667],["KOHLER LEVITY 1/4\" GLASS 48\" SHOWER"],["KOHLER 706014-L-SH LEVITY 48\" 1/4\" SHOWER DOOR W/TOWEL BAR CRYSTAL CLEAR GLASS AND SILVER FRAME 44-5/8\" - 47-5/8\"W X 74\"H HEADER HEIGHT AT 70\"",510.667],["KOHLER 706014-L-MX LEVITY CRYSTAL CLEAR 1/4\" GLASS SHOWER DOOR W/TOWEL BAR AND MATTE NICKEL FRAME 44-5/8\" - 47-5/8\"W X 74\"H HEADER HEIGHT AT 70\"",524],["KOHLER 706014-L-BL LEVITY 1/4 SHOWER DOOR 74 X 47-5/8 TB CRYSTAL CLEAR GLASS SHOWER DOOR W/TOWEL BAR AND MATTE BLACK FRAME 44-5/8\" - 47-5/8\"W X 74\"H HEADER HEIGHT AT 70\"",613.334],["KOHLER LEVITY 1/4\" GLASS 60\" TUB DOOR"],["KOHLER 706004-L-SH LEVITY FRAMELESS SLIDING BATH DOOR W/TOWEL BAR 1/4\" CRYSTAL CLEAR GLASS AND BRIGHT SILVER FRAME 56-5/8\"-59-5/8\"W X 62\"H",485.334],["KOHLER 706004-L-MX LEVITY 60\" 1/4\" BATH DOOR W/TOWEL BAR CRYSTAL CLEAR SLIDING GLASS AND MATTE NICKEL FRAME 56-5/8\"-59-5/8\"W X 62\"H",512],["KOHLER 706004-L-BL LEVITY 1/4 BATH DOOR 62 X 59-5/8 TB CRYSTAL CLEAR SLIDING GLASS AND MATTE BLACK FRAME 56-5/8\"-59-5/8\"W X 62\"H",553.334]]},{"name":"Toilets","labor":false,"markup":2.857,"rows":[["KINGSTON COMPLETE TOILET 12\"RI, ADA COMPLIANT"],["KOHLER 26077-0 KINGSTON COMPLETE SOLUTION TWO-PIECE COMFORT HEIGHT ELONGATED WHITE 1.28 gal TOILET KIT INCLUDES BOWL TANK QUIET CLOSE SEAT AND WAX RING. BOLTS & SUPPLY LINE SOLD SEPARATE.",195.787],["KINGSTON COMFORT HEIGHT 2-PC ELONGATED 12\"RI, ADA COMPLIANT"],["KOHLER 25100-0 KINGSTON 1.28 TANK",69.12],["KOHLER 25076-0 KINGSTON COMFORT HEIGHT ELONGATED BOWL WHITE",135.54],["KINGSTON 2-PC ELONGATED TOILET 12\"RI"],["KOHLER 25100-0 KINGSTON 1.28 TANK",69.12],["KOHLER 25086-0 KINGSTON EB BOWL",110.295],["KINGSTON 2-PC ROUND TOILET 12\"RI"],["KOHLER 25100-0 KINGSTON 1.28 TANK",69.12],["KOHLER 25096-0 KINGSTON PB BOWL *Non-Stock Item-Freight Chrgs Apply",95.419],["TOILET SEATS"],["KOHLER 4636-RL-0 ELONGATED WHITE READYLOCK SLOW CLOSE TOILET SEAT",37.256],["KOHLER 4639-RL-0 WHITE ROUND SLOW CLOSE SEAT",38.326]]},{"name":"Plumbing Fittings","labor":false,"markup":2.857,"rows":[["PEX FITTINGS"],["SIOUX CHIEF 665X2W100 PEX TUBING 1/2\" WHITE 100' COIL F1807 F1960",23.527],["SIOUX CHIEF 665X2B100 PEX TUBING 1/2 BLUE 100' COIL F1807 F1960",23.527],["SIOUX CHIEF 665X2R100 PEX TUBING 1/2 RED 100' COIL F1807 F1960",23.527],["4893F04 PEX 90DE 1/2 BR BARB X 1/2 FE 10/PK LEAD FREE COMPLIANT",3.879],["4690F0P POLY PEX 90 1/2 BARB 25BX 642PX2",0.514],["4630F0P POLY PEX TEE 1/2 BARB 50BX 641PX222",0.683],["4610F0P POLY PEX COUPLER 1/2 BARB 25/PK 645PX2",0.39],["4810F04 PEX ADPT 1/2 FIP NSW X 1/2 BR BARB LEAD FREE COMPLIANT 50/PK 647XG2",1.921],["CASH ACME UC953 1/2\" PEX SS CINCH CLAMP (RAVEN PCC12) *Non-Stock Item-Freight Chrgs Apply",0.269],["4810F05 PEX ADPT 1/2 MIP X 1/2 BR BARB LEAD FREE COMPLIANT 100/PK 646XG2",1.903],["4890F05 PEX 90 1/2 MIP X 1/2 BR BARB 5423-009 LEAD FREE COMPLIANT",2.744],["SWEAT FITTINGS"],["4810F02C PEX ADPT 1/2 SWEAT CO X 1/2 COPPER BARB 100/PK 644X2",0.588],["4890F02 PEX ELBOW 1/2\" PEX BARB X 1/2\" CO SWT 632X225",1.35],["3344F2 COP CAP CO 1/2 100/BOX",0.731],["1536F5 BRASS S40 PLUG 1/2\" LEAD FREE COMPLIANT BRPL0012-NL",2.543],["1544F4 BRASS S40 CAP 1/2\" LEAD FREE COMPLIANT BRCA0012-NL",2.576],["3310F25 COP ADPT COXMIP 1/2 50/BOX",2.158],["MISC"],["IPS 781 14006 CLEAR PVC CEMENT 1QT MEDIUM BODY 12/CS",12.55],["DRYWALL SCREW 6 X 1\" 1#/TUB",4],["DRYWALL SCREW 6 X 1-1/4 1#/TUB",4.086],["DRYWALL SCREW 6 X 1-5/8 1#/TUB NCS1581 Your # 54793",3.964],["DRYWALL SCREW 6 X 2\" 1#/TUB",3.964],["DRYWALL SCREW 8 X 3\" 1# TUB",4.086],["MIDWEST 04275BX DRY WALL ANCHOR-ZINC - 100/BX SPIRAL TYPE",30.342],["2\" PVC/SHOWER"],["5366N20 PIPE PVC S40 2\" X 20'",0.803],["5110N2 PVC DWV COUP 2\" P100-020 100/BOX",0.841],["5190N2 PVC DWV 90 2\" D300-020 50/BOX",2.058],["5131N2 PVC DWV SANI TEE 2\" D400-020 30/BOX",3.63],["5140N2 PVC DWV WYE 2\" P600-020 25/BOX",4.083],["5145N2 PVC DWV 45 2\" P321-020 50/BOX",1.903],["5170N2 PVC DWV SOLV WELD P-TRAP 2\" P706X-020 LOW PROFILE 25/BOX",7.554],["FERNCO 1056-215 COUP 2X1-1/2 CI/PL-CI/PL",3.488],["5127NM32 PVC DWV BUSH 2 X 1-1/2\" P107-251 50/BOX",1.066],["FERNCO 1056-22 COUP 2\" CI/PL - CI/PL",3.314],["FERNCO 3001-22 COUP P/F 2 CI/PL/ST X CO",12.007],["5190N32 PVC DWV ST 90 2\" P302-020 50/BOX",2.596],["5145N32 PVC DWV ST 45 2\" D323-020 50/BOX",1.946],["5192N2 PVC DWV VENT 90 2\" D331-020",3.482],["1 1/2\" PVC/TUBS"],["5366M20 PIPE PVC S40 1-1/2\" X 20'",0.598],["5145M2 PVC DWV 45 1-1/2\" D321-015 100/BOX",1.277],["5131M2 PVC DWV SANI TEE 1-1/2\" D400-015 60/BOX",2.275],["5140M2 PVC DWV WYE 1-1/2 45/BOX",4.142],["5190M2 PVC DWV 90 1-1/2 D300-015 100/BOX",1.304],["5110M2 PVC DWV COUP 1-1/2 D100-015 100/BOX",0.613],["FERNCO 1056-150 COUP 1-1/2 CI/PL- CI/PL",3.072],["FERNCO 3001-150 COUP P/F 1-1/2 CI/PL/ST X CO",9.136],["5170M2 PVC DWV SOLV WELD P-TRAP 1-1/2\" P706X-015 LOW PROFILE 25/BOX",2.765],["5115M21 PVC DWV HUB DESANKO 1-1/2 D104-015",2.622],["5115M31 PVC DWV SPG DESANKO 1-1/2\" P103P-015",2.476],["5190M32 PVC DWV ST 90 1-1/2\" D302-015 100/BOX",1.687],["TOILET/SINK"],["BRASSCRAFT G2PS19XC ANGLE STOP 1/2 PUSH X 3/8OD CHROME 1/4 TURN LEAD FREE COMPLIANT",11.183],["BRASSCRAFT G2PS14XC STRAIGHT STOP 1/2 PUSH X 3/8OD CHROME 1/4 TURN LEAD FREE COMPLIANT",11.781],["FLAT ESC 5/8 OD CP 910-2",0.561],["SIOUX CHIEF 920-2W ESCUTCHEON FOR 1/2\" PEX TUBING (WHITE) #RXEW3",0.244],["LAV SUPPLY SS 3/8 COMP X 1/2 FIP 20\" PLS1-20AF 25/CASE",2.452],["PVC TUBULAR P-TRAP 1-1/2 P9703W 50/CASE 230-0706201",1.476],["PVC SINK TAILPIECE 1-1/2 X 8 230-40060825",0.805],["PVC S-TRAP TUBULAR 1-1/2 230-1106101 10/CASE",5.476],["CLOSET SUPPLY SS 3/8 COMP X 7/8 16\"",2.257],["FLUIDMASTER 7513 THICK FLANGED WAX SEAL WITH HORN (JUMBO)",3.476],["MILLROSE 73065 BLUE MONSTER CLOSET BOLTS 5/16 X 2-1/4",3.232],["MILLROSE 70885 1/2 X 1429\" BLUE MONSTER THREAD SEAL TAPE",3.159],["SIOUX CHIEF 886-MR REPAIR CLOSET FLANGE RING 1PC STAINLESS STEEL",4.297],["CPVC"],["4466F10 PIPE CPVC CTS 1/2\" X 10'",0.446],["4410F2 CPVC CTS COUP 1/2 S X S 4129-005",0.247],["4490F2 CPVC CTS 90 1/2 S X S 4106-005 100/BX",0.22],["4490F32 CPVC CTS ST 90 1/2 SPG X S 4109-005",0.347],["4445F2 CPVC CTS 45 1/2 S X S 4117-005 100/BX",0.361],["4445F32 CPVC CTS ST 45 1/2\" 4127-005 100/BX",0.565],["4430F2 CPVC CTS TEE 1/2 S 100/BX 4101-005",0.32],["441810F24SS CPVC CTS FE ADPT 1/2\" CPVC X 1/2\" STAINLESS STEEL 4135-005SS",3.619],["441810F25SS CPVC CTS MIP ADPT 1/2\" CPVC X 1/2\" SS 4136-005SS",3.619],["4478F2 CPVC BALL VALVE SOC 1/2 210-603",3.988],["4493F24SS CPVC CTS DE 90 1/2\" S X T CPVC X STAINLESS STEEL DE4107-005SS",6.37],["IPS FGGB 11028 FLOWGUARD GOLD CPVC CEMENT 1/2 PT",9.187],["IPS 14027 PLUMBING PRIMER PURPLE PVC/CPVC 1/2 PINT",5.886],["PRO PRESS"],["2666F10 COPPER TUBE HARD 1/2\" L 10'",2.954],["3610F2 78047 PRESS COP COUP CO 1/2 10/BAG",2.31],["3690F2 77317 PRESS COP 90 CO 1/2 10/BAG",2.564],["3690F32 77347 PRESS COP ST 90 FTG X CO 1/2",2.486],["3645F2 77607 PRESS COP 45 CO 1/2 10/BAG",3.1],["3645F32 77637 PRESS COP ST 45 FTG X CO 1/2",2.446],["3630F2 77377 PRESS COP TEE CO 1/2",3.903],["3610F25 79215 PRESS COP ADPT COXMIP 1/2\"",2.964],["3610F24 79300 PRESS COP ADPT 1/2\" CO X FE",3.697],["JOMAR 150-203G PRESS BALL VALVE 1/2\" FP 2 PC LF",6.244],["3693F24 PRESS X FIP DE 90 1/2\" 79190",12.653],["RIDGID 57363 RP241 COMPACT PRESS TOOL 1/2\" - 1-1/4\" PROPRESS JAWS W/CASE AND 2 EA 12V LIO BATTERIES AND CHARGER",2369.72]]},{"name":"Flooring","labor":false,"markup":2.857,"rows":[["INSTALL TOOLS"],["10-63 LVP FLOORING CUTTER WITH LONG HANDLE CUTS UP TO 13\" WIDE AND 1/2\" THICK MATERIAL",173.203],["10-63BLD FLOORING SHEAR REPLACEMENT BLADE FOR 10-63 LVP FLOORING CUTTER",90.654],["MSTRIKER-XXL TAPPING BLOCK HIGH-DENSITY POLYETHYLENE WITH WOOD HANDLE NO HAMMER NEEDED",62.667],["STANDARD UNDERLAYMENT"],["SHAW BRAVO 330SA ADVANCED 200 SQ FT ROLL /1.5 MM ACCOUSTICAL ADDED R-VALUE FLOORING UNDERLAYMENT WITH SEAM OVERLAP PROTECTION (SOLD BY THE ROLL ONLY)",80],["UNDERLAYMENT FOR OVER CONCRETE"],["US101 6 MIL POLY FILM 100 SQ FT ROLL / 0.6 MM UNDERLAYMENT FOR OVER CONCRETE (SOLD BY THE ROLL ONLY)",16.667],["FLOORING WITH TRIMS"],["SHAW CORETEC TILE VV870-12252 FOUSANNA LIMESTONE FLOORING 12.01\" X 24.02\" EA 14 PCS PER BOX 28.03 SF PER CTN (42 BOXES PER PALLET)",114.529],["SHAW FLOORING TM3CT-TM-12252 T-MOLDING TRIM 1\" X 94\" FOUSANNA LIMESTONE",54],["SHAW FLOORING RD3CT-12252 REDUCER TRIM 1\" X 94\" FOUSANNA LIMESTONE",54],["SHAW FLOORING BT3HU-12252 BABY THRESHOLD TRIM 1\" X 94\" FOUSANNA LIMESTONE",57.6],["SHAW FLOORING QTRCT - QUARTER RND 3.4-15M 12252 - FOUSSANA LIMESTONE 94.49\" X 0.71\"",30],["SHAW CORETEC TILE VV870-12253 AMANI MARBLE FLOORING 12.01\" X 24.02\" EA 14 PCS PER BOX 28.03 SF PER CTN (42 BOXES PER PALLET)",114.529],["SHAW FLOORING TM3CT-12253 T-MOLDING TRIM 1\" X 94\" AMANI MARBLE",54],["SHAW FLOORING RD3CT-12253 REDUCER TRIM 1\" X 94\" AMANI MARBLE",54],["SHAW FLOORING BT3HU-12253 BABY THRESHOLD TRIM 1\" X 94\" AMANI MARBLE",57.6],["SHAW FLOORING QTRCT - QUARTER RND 3.4-15M 12253 - AMANI MARBLE 94.49\" X 0.71\"",30],["SHAW CORETEC TILE VV870-12261 FERRO SANDSTONE FLOORING 12.01\" X 24.02\" EA 14 PCS PER BOX 28.03 SF PER CTN",114.529],["SHAW FLOORING TM3CT-12261 T-MOLDING TRIM 1\" X 94\" FERRO SANDSTONE",54],["SHAW FLOORING RD3CT-12261 REDUCER TRIM 1\" X 94\" FERRO SANDSTONE",54],["SHAW FLOORING BT3HU-12261 BABY THRESHOLD TRIM 1\" X 94\" FERRO SANDSTONE",57.6],["SHAW FLOORING QTRCT - QUARTER ROUND 3.4-15M 12261 - FERRO SANDSTONE 94.49\" X 0.71\"",30]]},{"name":"labor rates","labor":true,"markup":2.857,"rows":[["Wet Area- (Demo/Install 3 Walls, 1- removal and install Pan/Tub, 1-Shower head and operating fixture, Plumbing connection, 1 Shelf, 1 Grab bar, 1 Soap Dish)",1350],["Custom door",500],["Seat",150],["toilet R&R",125],["ceiling panel",125],["additional wall",215],["Additional grab bar",35],["Additional shelf or foot pedestal",20],["Caddy",50]]}]};
+var LS_JOB='revpricer.job.v1', LS_LIST='revpricer.list.v1';
+var S={list:BUILTIN, source:'site', qty:{}, hybrid:0, cat:0, q:''};
+var $=function(id){return document.getElementById(id);};
+function esc(s){return String(s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+var money=new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'});
+function usd(n){return money.format(Math.round((n+1e-9)*100)/100);}
+function qfmt(n){return String(Math.round(n*1000)/1000);}
+function lsGet(k){try{var v=localStorage.getItem(k);return v?JSON.parse(v):null;}catch(e){return null;}}
+function lsSet(k,v){try{if(v===null)localStorage.removeItem(k);else localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
+function dateIn(days){var d=new Date();d.setDate(d.getDate()+days);return d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});}
+function nice(name){return name.charAt(0).toUpperCase()+name.slice(1);}
+function pct(x){return (Math.round(x*10000)/100)+'%';}
+
+/* A price list from storage or the shared store is checked before use */
+function valid(l){
+  try{
+    if(!l||!Array.isArray(l.sheets)||!l.sheets.length||!Array.isArray(l.tiers))return false;
+    if(!(l.tax>=0)||!(l.at>0))return false;
+    return l.sheets.every(function(s){
+      return typeof s.name==='string'&&s.markup>0&&Array.isArray(s.rows)&&s.rows.every(function(r){
+        return Array.isArray(r)&&typeof r[0]==='string'&&(r.length===1||(r.length===2&&typeof r[1]==='number'&&isFinite(r[1])));
+      });
+    })&&l.tiers.every(function(t){return typeof t.label==='string'&&t.mult>0&&t.days>=0;});
+  }catch(e){return false;}
+}
+
+var toastTimer;
+function toast(msg){var t=$('toast');t.textContent=msg;t.hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(function(){t.hidden=true;},2600);}
+function modal(html){$('modal').innerHTML=html;$('veil').hidden=false;var b=$('modal').querySelector('button,textarea');if(b)b.focus();}
+function closeModal(){$('veil').hidden=true;$('modal').innerHTML='';}
+
+function setList(list,source){
+  S.list=list;S.source=source;
+  var keep={};RevLib.eachItem(list,function(it){if(S.qty[it.key]>0)keep[it.key]=S.qty[it.key];});
+  S.qty=keep;if(S.cat>=list.sheets.length)S.cat=0;
+  saveJob();renderAll();
+}
+function saveJob(){lsSet(LS_JOB,{qty:S.qty,hybrid:S.hybrid});}
+
+/* ---------- rendering ---------- */
+function renderInfo(){
+  $('listInfo').innerHTML='Price list: <b>'+esc(S.list.file)+'</b> &middot; updated '+esc(new Date(S.list.at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}));
+}
+function renderCats(r){
+  $('cats').innerHTML=S.list.sheets.map(function(s,i){
+    var n=r.perSheet[s.name]||0;
+    return '<button type="button" class="chip" data-cat="'+i+'" aria-pressed="'+(!S.q&&i===S.cat)+'">'+esc(nice(s.name))+(n?'<span class="n">'+n+'</span>':'')+'</button>';
+  }).join('');
+}
+function rowHtml(it){
+  var q=S.qty[it.key]||0,id='q-'+it.si+'-'+it.ri;
+  return '<div class="item'+(q>0?' on':'')+'" data-key="'+esc(it.key)+'" id="r-'+it.si+'-'+it.ri+'">'+
+    '<div class="d">'+esc(it.desc)+'</div><div class="p">'+usd(it.price)+'</div>'+
+    '<div class="step"><button type="button" data-step="-1" aria-label="One less">&minus;</button>'+
+    '<input id="'+id+'" type="text" inputmode="decimal" autocomplete="off" aria-label="Quantity" value="'+(q>0?qfmt(q):'')+'" placeholder="0">'+
+    '<button type="button" data-step="1" aria-label="One more">+</button></div></div>';
+}
+function renderItems(){
+  var html='',q=S.q.trim().toLowerCase();
+  if(q){
+    var words=q.split(/\s+/),n=0,lastHead='';
+    RevLib.eachItem(S.list,function(it){
+      var hay=(it.desc+' '+it.section+' '+it.sheet.name).toLowerCase();
+      if(n>=150||!words.every(function(w){return hay.indexOf(w)>=0;}))return;
+      var head=it.sheet.name+'|'+it.section;
+      if(head!==lastHead){html+='<div class="sec"><span class="from">'+esc(nice(it.sheet.name))+'</span>'+(it.section?' &middot; '+esc(it.section):'')+'</div>';lastHead=head;}
+      html+=rowHtml(it);n++;
+    });
+    if(!n)html='<div class="empty">Nothing matches that search. Try a model number or a shorter word.</div>';
+    else if(n>=150)html+='<div class="empty">Showing the first 150 matches. Add a word to narrow it down.</div>';
+  }else{
+    var lastSec=null;
+    RevLib.eachItem(S.list,function(it){
+      if(it.si!==S.cat)return;
+      if(it.section!==lastSec){if(it.section)html+='<div class="sec">'+esc(it.section)+'</div>';lastSec=it.section;}
+      html+=rowHtml(it);
+    });
+  }
+  $('items').innerHTML=html;
+}
+function renderSummary(){
+  var r=RevLib.price(S.list,S.qty,S.hybrid),mat=r.lines.filter(function(l){return !l.labor;}),lab=r.lines.filter(function(l){return l.labor;});
+  renderCats(r);
+  $('priceSub').textContent=r.lines.length?'Copy a price to paste it into your dashboard.':'Enter quantities to price the job.';
+  $('tiers').innerHTML=r.tiers.map(function(t,i){
+    return '<div class="tier'+(t.mult===1?' min':'')+'"><div class="l">'+esc(t.label)+'</div><div class="a">'+usd(t.amount)+'</div>'+
+      '<div class="e">Expires '+esc(dateIn(t.days))+(t.mult===1?' &middot; minimum sell price':'')+'</div>'+
+      '<button type="button" class="btn small" data-copy="'+esc(usd(t.amount))+'">Copy</button></div>';
+  }).join('');
+  $('brk').innerHTML=
+    '<dt>Materials sell price <span class="m">(cost '+usd(r.matCost)+' &times; '+esc(S.list.markup)+')</span></dt><dd>'+usd(r.matSell)+'</dd>'+
+    '<dt>Labor sell price <span class="m">(cost '+usd(r.labCost)+')</span></dt><dd>'+usd(r.labSell)+'</dd>'+
+    '<dt><label for="hybrid">Hybrid labor, small bath</label></dt><dd class="hy">$<input id="hybrid" type="text" inputmode="decimal" autocomplete="off" placeholder="0" value="'+(S.hybrid>0?qfmt(S.hybrid):'')+'"></dd>'+
+    '<div class="hint">Customer supplies vanity, med cabinet/fixture and paint. Added to the total as entered.</div>'+
+    '<dt class="tot">Total bathroom sell price</dt><dd class="tot">'+usd(r.minSell)+'</dd>'+
+    '<dt>Materials sales tax ('+pct(S.list.tax)+')</dt><dd>'+usd(r.tax)+'</dd>'+
+    '<dt>Materials with tax</dt><dd>'+usd(r.matWithTax)+'</dd>';
+  $('poSub').textContent=mat.length?mat.length+(mat.length===1?' item':' items')+' · materials cost '+usd(r.matCost):'No items selected';
+  $('btnNotes').disabled=$('btnTable').disabled=!mat.length;
+  var html=mat.map(function(l){
+    return '<div class="line"><div class="src">'+esc(l.sheet)+'</div>'+
+      '<button type="button" class="jump" data-jump="'+esc(l.key)+'" title="Show in the catalog">'+esc(l.desc)+'</button>'+
+      '<div class="m">'+qfmt(l.qty)+' &times; '+usd(l.price)+' = '+usd(l.total)+'</div>'+
+      '<button type="button" class="x" data-remove="'+esc(l.key)+'" aria-label="Remove from PO">&times;</button></div>';
+  }).join('');
+  if(!mat.length)html='<div class="empty" style="padding:8px 0">Items appear here as soon as a quantity is entered. There is nothing to refresh.</div>';
+  if(lab.length)html+='<div class="lab">Labor on this job: '+lab.map(function(l){return esc(qfmt(l.qty)+' × '+l.desc.split('(')[0].trim());}).join(', ')+'</div>';
+  $('po').innerHTML=html;
+  $('barTotal').textContent=usd(r.minSell);
+  $('barCount').textContent=r.lines.length+(r.lines.length===1?' line':' lines')+' · minimum sell price';
+  return r;
+}
+function renderAll(){renderInfo();renderItems();renderSummary();}
+
+/* ---------- quantities ---------- */
+function setQty(key,val,row){
+  var q=Math.max(0,Math.round((Number(val)||0)*1000)/1000);
+  if(q>0)S.qty[key]=q;else delete S.qty[key];
+  if(row){row.classList.toggle('on',q>0);var inp=row.querySelector('input');if(document.activeElement!==inp)inp.value=q>0?qfmt(q):'';}
+  saveJob();
+  var keepFocus=document.activeElement&&document.activeElement.id==='hybrid';
+  renderSummary();
+  if(keepFocus){var h=$('hybrid');h.focus();try{h.setSelectionRange(h.value.length,h.value.length);}catch(e){}}
+}
+function rowFor(key){var rows=$('items').querySelectorAll('.item');for(var i=0;i<rows.length;i++)if(rows[i].getAttribute('data-key')===key)return rows[i];return null;}
+
+$('items').addEventListener('click',function(e){
+  var b=e.target.closest('button[data-step]');if(!b)return;
+  var row=b.closest('.item'),key=row.getAttribute('data-key');
+  setQty(key,Math.floor((S.qty[key]||0)+Number(b.getAttribute('data-step'))),row);
+});
+$('items').addEventListener('input',function(e){
+  if(e.target.tagName!=='INPUT')return;
+  var row=e.target.closest('.item');
+  setQty(row.getAttribute('data-key'),e.target.value.replace(/[^0-9.]/g,''),row);
+});
+$('items').addEventListener('focusout',function(e){
+  if(e.target.tagName!=='INPUT')return;
+  var q=S.qty[e.target.closest('.item').getAttribute('data-key')]||0;e.target.value=q>0?qfmt(q):'';
+});
+$('cats').addEventListener('click',function(e){
+  var b=e.target.closest('.chip');if(!b)return;
+  S.cat=Number(b.getAttribute('data-cat'));S.q='';$('search').value='';renderItems();renderSummary();
+  window.scrollTo(0,Math.min(window.scrollY,$('cats').offsetTop));
+});
+$('search').addEventListener('input',function(e){S.q=e.target.value;renderItems();renderSummary();});
+$('brk').addEventListener('input',function(e){
+  if(e.target.id!=='hybrid')return;
+  S.hybrid=Math.max(0,Number(e.target.value.replace(/[^0-9.]/g,''))||0);saveJob();
+  var pos=e.target.value;renderSummary();var h=$('hybrid');h.value=pos;h.focus();
+});
+
+/* ---------- copy ---------- */
+function copy(text,label){
+  function manual(){
+    modal('<h2 id="mTitle">Copy this text</h2><p>Press and hold inside the box, choose Select All, then Copy.</p><textarea id="mText" readonly></textarea><div class="actions"><button type="button" class="btn primary" data-close>Done</button></div>');
+    var t=$('mText');t.value=text;t.focus();t.select();
+  }
+  function legacy(){
+    try{var ta=document.createElement('textarea');ta.value=text;ta.setAttribute('readonly','');ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();ta.setSelectionRange(0,text.length);var ok=document.execCommand('copy');document.body.removeChild(ta);if(ok)toast(label);else manual();}
+    catch(e){manual();}
+  }
+  try{
+    if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(text).then(function(){toast(label);},legacy);
+    else legacy();
+  }catch(e){legacy();}
+}
+function poLines(){return RevLib.price(S.list,S.qty,S.hybrid).lines.filter(function(l){return !l.labor;});}
+$('btnNotes').addEventListener('click',function(){
+  var l=poLines();copy(l.map(function(x){return qfmt(x.qty)+' x '+x.desc;}).join('\n'),'Copied '+l.length+(l.length===1?' line':' lines'));
+});
+$('btnTable').addEventListener('click',function(){
+  var l=poLines(),rows=[['Source Sheet','Model Number and Description','Price','Qty','Total']];
+  l.forEach(function(x){rows.push([x.sheet,x.desc,x.price,qfmt(x.qty),Math.round(x.total*1000)/1000]);});
+  copy(rows.map(function(r){return r.join('\t');}).join('\n'),'Copied table, paste into a spreadsheet or notes');
+});
+$('summary').addEventListener('click',function(e){
+  var c=e.target.closest('[data-copy]');if(c){copy(c.getAttribute('data-copy'),'Copied '+c.getAttribute('data-copy'));return;}
+  var x=e.target.closest('[data-remove]');if(x){var k=x.getAttribute('data-remove');setQty(k,0,rowFor(k));return;}
+  var j=e.target.closest('[data-jump]');if(j){
+    var key=j.getAttribute('data-jump'),hit=null;RevLib.eachItem(S.list,function(it){if(it.key===key)hit=it;});
+    if(!hit)return;S.cat=hit.si;S.q='';$('search').value='';renderItems();renderSummary();
+    var row=$('r-'+hit.si+'-'+hit.ri);if(row)row.scrollIntoView({block:'center'});
+  }
+});
+$('btnJump').addEventListener('click',function(){$('summary').scrollIntoView({block:'start'});});
+
+/* ---------- clear job ---------- */
+$('btnClear').addEventListener('click',function(){
+  modal('<h2 id="mTitle">Clear this job?</h2><p>All quantities and the hybrid labor amount go back to zero.</p><div class="actions"><button type="button" class="btn" data-close>Keep the job</button><button type="button" class="btn danger" id="mClear">Clear job</button></div>');
+  $('mClear').addEventListener('click',function(){S.qty={};S.hybrid=0;saveJob();closeModal();renderAll();});
+});
+$('veil').addEventListener('click',function(e){if(e.target===$('veil')||e.target.closest('[data-close]'))closeModal();});
+document.addEventListener('keydown',function(e){if(e.key==='Escape'&&!$('veil').hidden)closeModal();});
+
+/* ---------- price list update: workbook -> prices.json for the repository ---------- */
+$('btnUpload').addEventListener('click',function(){
+  modal('<h2 id="mTitle">Update the price list</h2>'+
+    '<p>Choose the newest REV pricing workbook (.xlsx). The tool reads every tab that has Price or Cost in cell B1, plus the markup, sales tax and the three offer levels on the Header Addendum tab. Quantities typed into the workbook are ignored.</p>'+
+    '<p>You get a <b>prices.json</b> file to upload to the GitHub repository. Reps do not need to do this.</p>'+
+    '<p class="err" id="mErr" hidden></p>'+
+    '<div class="actions"><button type="button" class="btn" data-close>Cancel</button><button type="button" class="btn primary" id="mPick">Choose workbook</button></div>');
+  $('mPick').addEventListener('click',function(){$('file').value='';$('file').click();});
+});
+$('file').addEventListener('change',function(){
+  var f=$('file').files&&$('file').files[0];if(!f)return;
+  function fail(msg){var e=$('mErr');if(e){e.textContent=msg;e.hidden=false;}else toast(msg);}
+  var fr=new FileReader();
+  fr.onerror=function(){fail('That file could not be read. Try choosing it again.');};
+  fr.onload=function(){
+    RevLib.parseWorkbook(fr.result,f.name).then(function(list){
+      if(!valid(list))throw new Error('NO_PRICES');
+      var d=RevLib.diff(S.list,list);
+      modal('<h2 id="mTitle">Check the new price list</h2><p><b>'+esc(f.name)+'</b></p><ul>'+
+        '<li>'+RevLib.countItems(list)+' priced items on '+list.sheets.length+' tabs</li>'+
+        '<li>'+d.changed+' prices changed, '+d.added+' items added, '+d.removed+' removed, compared with the list in use now</li>'+
+        '<li>Markup &times;'+esc(list.markup)+', materials sales tax '+pct(list.tax)+'</li>'+
+        '<li>Offer levels: '+list.tiers.map(function(t){return '&times;'+esc(t.mult)+' for '+esc(t.days)+' days';}).join(', ')+'</li></ul>'+
+        '<div class="actions"><button type="button" class="btn" data-close>Cancel</button><button type="button" class="btn primary" id="mUse">Download prices.json</button></div>');
+      $('mUse').addEventListener('click',function(){
+        try{
+          var url=URL.createObjectURL(new Blob([JSON.stringify(list)],{type:'application/json'})),a=document.createElement('a');
+          a.href=url;a.download='prices.json';document.body.appendChild(a);a.click();document.body.removeChild(a);
+          setTimeout(function(){URL.revokeObjectURL(url);},4000);
+        }catch(e){}
+        lsSet(LS_LIST,list);setList(list,'site');
+        modal('<h2 id="mTitle">Now put it on GitHub</h2><p>prices.json is in your downloads, and this device is already showing the new prices so you can check them.</p><ul>'+
+          '<li>Open the repository on github.com</li><li>Choose Add file, then Upload files</li><li>Drop in prices.json and choose Commit changes</li></ul>'+
+          '<p>Reps get the new prices the next time they open the tool, usually within a few minutes.</p>'+
+          '<div class="actions"><button type="button" class="btn primary" data-close>Done</button></div>');
+      });
+    }).catch(function(err){
+      var m=String(err&&err.message);
+      fail(m==='NO_PRICES'?'No price tabs were found in that workbook. Each product tab needs Price in cell B1 and a "sub cost" row at the bottom, like the current workbook.':
+        'That file is not an Excel workbook (.xlsx). In Excel choose File, Save As, Excel Workbook, then upload the saved file.');
+    });
+  };
+  fr.readAsArrayBuffer(f);
+});
+
+/* ---------- start: newest of the built-in list, the last one seen on this device, and the site's prices.json ---------- */
+var job=lsGet(LS_JOB);
+if(job&&job.qty&&typeof job.qty==='object'){Object.keys(job.qty).forEach(function(k){if(job.qty[k]>0)S.qty[k]=Number(job.qty[k]);});S.hybrid=job.hybrid>0?Number(job.hybrid):0;}
+var cached=lsGet(LS_LIST);
+if(valid(cached)&&cached.at>BUILTIN.at)setList(cached,'site');else setList(BUILTIN,'site');
+if(window.fetch&&location.protocol!=='file:'){
+  fetch('prices.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.ok?r.json():null;}).then(function(list){
+    if(!valid(list)||!(list.at>S.list.at))return;
+    lsSet(LS_LIST,list);setList(list,'site');toast('Price list updated: '+list.file);
+  }).catch(function(){});
+}
+})();
+</script>
+</body>
+</html>
