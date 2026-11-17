@@ -61,7 +61,7 @@ h1,h2,h3{font-family:var(--display);margin:0;text-wrap:balance;line-height:1.15}
 .panel{background:var(--surface);border:1px solid var(--line);border-radius:10px}
 .sec{font:600 15px/1.2 var(--display);letter-spacing:.04em;text-transform:uppercase;color:var(--muted);padding:14px 14px 6px}
 .sec .from{color:var(--accent)}
-.item{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:6px 14px;align-items:center;padding:10px 14px;border-top:1px solid var(--line)}
+.item{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 14px;align-items:center;padding:10px 14px;border-top:1px solid var(--line)}
 .item.on{background:var(--accent-soft)}
 .item .d{font-size:15px;overflow-wrap:anywhere}
 .item .p{color:var(--muted);font-size:15px;text-align:right;white-space:nowrap}
@@ -116,9 +116,6 @@ dl.brk .tot{color:var(--ink);font-weight:600}
   .bar .c{font-size:13px;color:var(--muted)}
 }
 @media (max-width:520px){
-  .item{grid-template-columns:minmax(0,1fr) auto}
-  .item .d{grid-column:1 / -1}
-  .item .p{text-align:left}
   .top h1{font-size:24px}
 }
 </style>
@@ -161,7 +158,6 @@ dl.brk .tot{color:var(--ink);font-weight:600}
         <div class="sub" id="poSub"></div>
         <div class="pohead">
           <button class="btn primary" id="btnNotes" type="button">Copy notes</button>
-          <button class="btn" id="btnTable" type="button">Copy as table with prices</button>
         </div>
         <div id="po"></div>
       </section>
@@ -548,7 +544,7 @@ function renderCats(r){
 function rowHtml(it){
   var q=S.qty[it.key]||0,id='q-'+it.si+'-'+it.ri;
   return '<div class="item'+(q>0?' on':'')+'" data-key="'+esc(it.key)+'" id="r-'+it.si+'-'+it.ri+'">'+
-    '<div class="d">'+esc(it.desc)+'</div><div class="p">'+usd(it.price)+'</div>'+
+    '<div class="d">'+esc(it.desc)+'</div>'+
     '<div class="step"><button type="button" data-step="-1" aria-label="One less">&minus;</button>'+
     '<input id="'+id+'" type="text" inputmode="decimal" autocomplete="off" aria-label="Quantity" value="'+(q>0?qfmt(q):'')+'" placeholder="0">'+
     '<button type="button" data-step="1" aria-label="One more">+</button></div></div>';
@@ -586,19 +582,16 @@ function renderSummary(){
       '<button type="button" class="btn small" data-copy="'+esc(usd(t.amount))+'">Copy</button></div>';
   }).join('');
   $('brk').innerHTML=
-    '<dt>Materials sell price <span class="m">(cost '+usd(r.matCost)+' &times; '+esc(S.list.markup)+')</span></dt><dd>'+usd(r.matSell)+'</dd>'+
-    '<dt>Labor sell price <span class="m">(cost '+usd(r.labCost)+')</span></dt><dd>'+usd(r.labSell)+'</dd>'+
     '<dt><label for="hybrid">Hybrid labor, small bath</label></dt><dd class="hy">$<input id="hybrid" type="text" inputmode="decimal" autocomplete="off" placeholder="0" value="'+(S.hybrid>0?qfmt(S.hybrid):'')+'"></dd>'+
     '<div class="hint">Customer supplies vanity, med cabinet/fixture and paint. Added to the total as entered.</div>'+
-    '<dt class="tot">Total bathroom sell price</dt><dd class="tot">'+usd(r.minSell)+'</dd>'+
     '<dt>Materials sales tax ('+pct(S.list.tax)+')</dt><dd>'+usd(r.tax)+'</dd>'+
     '<dt>Materials with tax</dt><dd>'+usd(r.matWithTax)+'</dd>';
-  $('poSub').textContent=mat.length?mat.length+(mat.length===1?' item':' items')+' · materials cost '+usd(r.matCost):'No items selected';
-  $('btnNotes').disabled=$('btnTable').disabled=!mat.length;
+  $('poSub').textContent=mat.length?mat.length+(mat.length===1?' item':' items'):'No items selected';
+  $('btnNotes').disabled=!mat.length;
   var html=mat.map(function(l){
     return '<div class="line"><div class="src">'+esc(l.sheet)+'</div>'+
       '<button type="button" class="jump" data-jump="'+esc(l.key)+'" title="Show in the catalog">'+esc(l.desc)+'</button>'+
-      '<div class="m">'+qfmt(l.qty)+' &times; '+usd(l.price)+' = '+usd(l.total)+'</div>'+
+      '<div class="m">Qty '+qfmt(l.qty)+'</div>'+
       '<button type="button" class="x" data-remove="'+esc(l.key)+'" aria-label="Remove from PO">&times;</button></div>';
   }).join('');
   if(!mat.length)html='<div class="empty" style="padding:8px 0">Items appear here as soon as a quantity is entered. There is nothing to refresh.</div>';
@@ -667,11 +660,6 @@ function poLines(){return RevLib.price(S.list,S.qty,S.hybrid).lines.filter(funct
 $('btnNotes').addEventListener('click',function(){
   var l=poLines();copy(l.map(function(x){return qfmt(x.qty)+' x '+x.desc;}).join('\n'),'Copied '+l.length+(l.length===1?' line':' lines'));
 });
-$('btnTable').addEventListener('click',function(){
-  var l=poLines(),rows=[['Source Sheet','Model Number and Description','Price','Qty','Total']];
-  l.forEach(function(x){rows.push([x.sheet,x.desc,x.price,qfmt(x.qty),Math.round(x.total*1000)/1000]);});
-  copy(rows.map(function(r){return r.join('\t');}).join('\n'),'Copied table, paste into a spreadsheet or notes');
-});
 $('summary').addEventListener('click',function(e){
   var c=e.target.closest('[data-copy]');if(c){copy(c.getAttribute('data-copy'),'Copied '+c.getAttribute('data-copy'));return;}
   var x=e.target.closest('[data-remove]');if(x){var k=x.getAttribute('data-remove');setQty(k,0,rowFor(k));return;}
@@ -694,7 +682,7 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'&&!$('veil').
 /* ---------- price list update: workbook -> prices.json for the repository ---------- */
 $('btnUpload').addEventListener('click',function(){
   modal('<h2 id="mTitle">Update the price list</h2>'+
-    '<p>Choose the newest REV pricing workbook (.xlsx). The tool reads every tab that has Price or Cost in cell B1, plus the markup, sales tax and the three offer levels on the Header Addendum tab. Quantities typed into the workbook are ignored.</p>'+
+    '<p>Choose the newest REV pricing workbook (.xlsx). The tool reads every tab that has Price or Cost in cell B1, plus the sales tax and the three offer levels on the Header Addendum tab. Quantities typed into the workbook are ignored.</p>'+
     '<p>You get a <b>prices.json</b> file to upload to the GitHub repository. Reps do not need to do this.</p>'+
     '<p class="err" id="mErr" hidden></p>'+
     '<div class="actions"><button type="button" class="btn" data-close>Cancel</button><button type="button" class="btn primary" id="mPick">Choose workbook</button></div>');
@@ -712,7 +700,7 @@ $('file').addEventListener('change',function(){
       modal('<h2 id="mTitle">Check the new price list</h2><p><b>'+esc(f.name)+'</b></p><ul>'+
         '<li>'+RevLib.countItems(list)+' priced items on '+list.sheets.length+' tabs</li>'+
         '<li>'+d.changed+' prices changed, '+d.added+' items added, '+d.removed+' removed, compared with the list in use now</li>'+
-        '<li>Markup &times;'+esc(list.markup)+', materials sales tax '+pct(list.tax)+'</li>'+
+        '<li>Materials sales tax '+pct(list.tax)+'</li>'+
         '<li>Offer levels: '+list.tiers.map(function(t){return '&times;'+esc(t.mult)+' for '+esc(t.days)+' days';}).join(', ')+'</li></ul>'+
         '<div class="actions"><button type="button" class="btn" data-close>Cancel</button><button type="button" class="btn primary" id="mUse">Download prices.json</button></div>');
       $('mUse').addEventListener('click',function(){
