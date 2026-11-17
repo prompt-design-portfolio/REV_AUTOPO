@@ -6,6 +6,7 @@ REV Job Pricer: a web tool for sales reps to price a job and copy the PO line it
 
 - `index.html` is the whole tool.
 - `prices.json` is the current price list. The tool loads it every time it opens.
+- `jspdf.umd.min.js` is the jsPDF library (MIT license) that makes the PO / Invoice PDF.
 
 ## Updating prices
 
